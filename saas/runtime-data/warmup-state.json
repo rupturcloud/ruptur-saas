@@ -1,0 +1,148 @@
+{
+  "config": {
+    "settings": {
+      "serverUrl": "https://tiatendeai.uazapi.com",
+      "adminToken": "UmiLwsiyjN01ipt5XuaU97vC4PTyPwHfhFN15CyHvJklANTzGX",
+      "supabaseUrl": "https://axrwlboyowoskdxeogba.supabase.co",
+      "supabaseKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4cndsYm95b3dvc2tkeGVvZ2JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MzkzNTYsImV4cCI6MjA4OTUxNTM1Nn0.jrVy7OzLgidDYlK2rFuF1NX2SRP0EVmQycx3d_s7vV8",
+      "defaultDelay": 3000,
+      "warmupMinIntervalMs": 345600,
+      "warmupMaxDailyPerInstance": 250,
+      "warmupCooldownRounds": 1,
+      "warmupReadChat": false,
+      "warmupReadMessages": false,
+      "warmupAsync": true,
+      "antiBanMaxPerMinute": 12,
+      "operatorLabel": "Operador local @127.0.0.1",
+      "riskOverride": null
+    },
+    "routines": [
+      {
+        "id": "warmup-default-24x7",
+        "mode": "one-to-one",
+        "name": "Warmup 24/7 Padrão",
+        "delayMax": 20,
+        "delayMin": 8,
+        "isActive": true,
+        "messages": [],
+        "createdAt": "2026-03-26T17:17:37.420Z",
+        "totalSent": 0,
+        "senderInstances": [],
+        "receiverInstances": []
+      }
+    ],
+    "messages": [
+      {
+        "id": "1",
+        "name": "Saudação 1",
+        "text": "Oi, tudo certo por aí?",
+        "category": "Saudação",
+        "createdAt": "2026-03-25T15:33:03.520Z"
+      },
+      {
+        "id": "2",
+        "name": "Saudação 2",
+        "text": "Bom dia. Passando para dar um oi.",
+        "category": "Saudação",
+        "createdAt": "2026-03-25T15:33:03.520Z"
+      },
+      {
+        "id": "3",
+        "name": "Resposta curta 1",
+        "text": "Aqui está tranquilo.",
+        "category": "Resposta curta",
+        "createdAt": "2026-03-25T15:33:03.520Z"
+      },
+      {
+        "id": "4",
+        "name": "Continuidade 1",
+        "text": "Depois me conta se ficou tudo ok.",
+        "category": "Continuidade",
+        "createdAt": "2026-03-25T15:33:03.520Z"
+      },
+      {
+        "id": "5",
+        "name": "Grupo 1",
+        "text": "Pessoal, só fazendo um teste leve por aqui.",
+        "category": "Grupo",
+        "createdAt": "2026-03-25T15:33:03.520Z"
+      },
+      {
+        "id": "6",
+        "name": "Encerramento 1",
+        "text": "Fechou, depois falamos.",
+        "category": "Encerramento",
+        "createdAt": "2026-03-25T15:33:03.520Z"
+      }
+    ]
+  },
+  "scheduler": {
+    "enabled": false,
+    "status": "stopped",
+    "round": 0,
+    "lastManualAction": {
+      "action": "stop",
+      "actor": "Operador local @127.0.0.1",
+      "reason": "Parada manual confirmada no painel",
+      "acceptedAt": "2026-03-31T23:46:14.408Z"
+    },
+    "lastError": "Warmup parado manualmente por Operador local @127.0.0.1 · Parada manual confirmada no painel"
+  },
+  "summary": {
+    "totalInstances": 0,
+    "connected": 0,
+    "eligible": 0,
+    "heatingNow": 0,
+    "regenerating": 0,
+    "queuedEntries": 0,
+    "persistentPoolSize": 0,
+    "subpoolCount": 0,
+    "sentToday": 0,
+    "recentErrors": 0,
+    "activeRoutines": 1,
+    "cadenceBpm": 0,
+    "isPulsing": false
+  },
+  "currentPool": {
+    "persistent": {
+      "updatedAt": "1970-01-01T00:00:00.000Z",
+      "healthyTokens": [],
+      "readyTokens": []
+    }
+  },
+  "instanceStates": {},
+  "logs": [
+    {
+      "id": "a485fcc3-1a2b-44cc-b711-8ee663ca73f0",
+      "timestamp": "2026-03-31T23:46:14.416Z",
+      "type": "scheduler",
+      "status": "info",
+      "message": "Warmup parado manualmente por Operador local @127.0.0.1.",
+      "details": "Parada manual confirmada no painel",
+      "instanceName": "Warmup Runtime"
+    },
+    {
+      "id": "a35180dc-a6f8-4a64-93f5-12a17ffdc5bf",
+      "timestamp": "2026-03-26T17:17:37.422Z",
+      "type": "warmup",
+      "instanceName": "runtime",
+      "message": "Rotina padrão 24/7 criada automaticamente",
+      "status": "info",
+      "routineId": "warmup-default-24x7",
+      "routineName": "Warmup 24/7 Padrão",
+      "mode": "one-to-one"
+    }
+  ],
+  "auditTrail": [
+    {
+      "id": "41adce64-05dc-4761-a3ab-42d4fc280bf5",
+      "timestamp": "2026-03-31T23:46:14.416Z",
+      "type": "manual_control",
+      "actor": "Operador local @127.0.0.1",
+      "action": "warmup_stop",
+      "details": "Parada manual confirmada no painel"
+    }
+  ],
+  "lastSyncedAt": "2026-04-01T00:39:07.324Z",
+  "activityWindowVersion": 1
+}
