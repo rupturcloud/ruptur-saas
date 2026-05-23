@@ -25,11 +25,14 @@ export class ApiError extends Error {
   }
 }
 
-// Hook de auth: cada chamada injeta o token do AuthContext via window.__ruptur.auth.token
+// Hook de auth: cada chamada injeta token + tenantId do AuthContext via window.__ruptur.auth
 // (setado por AuthContext.jsx ao logar). Evita dependência circular React → http.
 function getAuthHeader() {
-  const token = window.__ruptur?.auth?.token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const { token, tenantId } = window.__ruptur?.auth || {};
+  const headers = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (tenantId) headers['X-Tenant-Id'] = tenantId;
+  return headers;
 }
 
 function buildPath(path, params = {}) {

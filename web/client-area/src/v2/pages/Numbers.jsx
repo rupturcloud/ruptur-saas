@@ -14,6 +14,7 @@ import {
 } from '../../ds/index.js';
 import { whatsappApi } from '../../api/whatsapp.api.js';
 import { useToast } from '../../ds/toast.js';
+import { useAuth } from '../../contexts/AuthContext.jsx';
 
 // ---------------------------------------------------------------------------
 // Utilitários
@@ -1008,6 +1009,7 @@ function NewNumberModal({ onClose, onCreate }) {
 // Numbers — componente principal
 // ---------------------------------------------------------------------------
 export default function Numbers() {
+  const { authReady } = useAuth();
   const [tab, setTab] = useState('instances');
   const [instances, setInstances] = useState([]);
   const [healthMap, setHealthMap] = useState({});   // id → { msgsToday, deliveryRate, uptime, sparkline }
@@ -1065,8 +1067,10 @@ export default function Numbers() {
     }
   }, [enrich, loadHealth]);
 
+  // Aguarda authReady para garantir que window.__ruptur.auth.token está disponível
+  // antes de disparar a chamada à API (evita race condition → 401).
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadNumbers(); }, [loadNumbers]);
+  useEffect(() => { if (authReady) loadNumbers(); }, [authReady, loadNumbers]);
 
   // Polling de health a cada 30s
   useEffect(() => {

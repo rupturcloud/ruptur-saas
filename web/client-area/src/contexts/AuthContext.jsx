@@ -275,12 +275,15 @@ export function AuthProvider({ children }) {
     setTenant(null);
   }, []);
 
-  // Expõe token no window para o httpClient (evita dependência circular React→http).
-  // O httpClient lê window.__ruptur.auth.token em cada chamada — nunca persiste em closure.
+  // Expõe token + tenantId no window para o httpClient (evita dependência circular React→http).
+  // O httpClient lê window.__ruptur.auth.token e tenantId em cada chamada.
   useEffect(() => {
     window.__ruptur = window.__ruptur || {};
-    window.__ruptur.auth = { token: session?.access_token ?? null };
-  }, [session]);
+    window.__ruptur.auth = {
+      token: session?.access_token ?? null,
+      tenantId: tenant?.id ?? null,
+    };
+  }, [session, tenant]);
 
   // Helpers derivados
   const isAuthenticated = !!session && !!user;

@@ -75,7 +75,9 @@ export async function extractAndValidateTenantId(url, req, user, supabase) {
     req.headers['x-tenant-id'];
 
   if (!requestedTenantId) {
-    return null; // Sem tenantId solicitado
+    // Auto-resolve: usar o tenant padrão do usuário (primeiro membership)
+    // Isso permite chamadas sem tenant_id explícito em SaaS single-tenant por usuário.
+    return getDefaultTenantForUser(user, supabase);
   }
 
   // Validar que o usuário tem permissão
