@@ -14,40 +14,56 @@
  *   /admin       → Painel administrativo (apenas admins)
  */
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
-import DashboardLayout from './components/DashboardLayout';
-import ProtectedRoute from './components/ProtectedRoute';
-import LoginScreen from './pages/LoginScreen';
-import SignUp from './pages/SignUp';
-import Onboarding from './pages/Onboarding';
-import DashboardHome from './pages/DashboardHome';
-import Campaigns from './pages/Campaigns';
-import Wallet from './pages/Wallet';
-import Inbox from './pages/Inbox';
-import Instances from './pages/Instances';
-import Warmup from './pages/Warmup';
-import MessageLibrary from './pages/MessageLibrary';
-import ClientLogs from './pages/ClientLogs';
-import Reports from './pages/Reports';
-import AdminDashboard from './pages/AdminDashboard';
-import SuperAdminDashboard from './pages/SuperAdminDashboard';
-import AcceptAdminInvite from './pages/AcceptAdminInvite';
-import AccessDenied from './pages/AccessDenied';
-import Health from './pages/Health';
+import { useEffect, lazy, Suspense } from 'react';
 import './App.css';
 
+// ── Bundle inicial (críticos — não lazy) ──────────────────────────────────────
+import ProtectedRoute from './components/ProtectedRoute';
+import LoginScreen from './pages/LoginScreen';
 import LandingPage from './pages/LandingPage';
 
-// V2 — Ruptur SaaS · WhatsApp Sales OS (handoff portado em paralelo)
+// ── V1 páginas — lazy (carregadas sob demanda) ────────────────────────────────
+const DashboardLayout    = lazy(() => import('./components/DashboardLayout'));
+const SignUp             = lazy(() => import('./pages/SignUp'));
+const Onboarding         = lazy(() => import('./pages/Onboarding'));
+const DashboardHome      = lazy(() => import('./pages/DashboardHome'));
+const Campaigns          = lazy(() => import('./pages/Campaigns'));
+const Wallet             = lazy(() => import('./pages/Wallet'));
+const Inbox              = lazy(() => import('./pages/Inbox'));
+const Instances          = lazy(() => import('./pages/Instances'));
+const Warmup             = lazy(() => import('./pages/Warmup'));
+const MessageLibrary     = lazy(() => import('./pages/MessageLibrary'));
+const ClientLogs         = lazy(() => import('./pages/ClientLogs'));
+const Reports            = lazy(() => import('./pages/Reports'));
+const AdminDashboard     = lazy(() => import('./pages/AdminDashboard'));
+const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'));
+const AcceptAdminInvite  = lazy(() => import('./pages/AcceptAdminInvite'));
+const AccessDenied       = lazy(() => import('./pages/AccessDenied'));
+const Health             = lazy(() => import('./pages/Health'));
+
+// ── V2 — Ruptur OS (handoff portado) — lazy ───────────────────────────────────
 import { ToastProvider as RupturToastProvider } from './ds/index.js';
 import AppShellV2 from './v2/layout/AppShell.jsx';
 import LandingV2 from './v2/pages/Landing.jsx';
-import DashboardV2 from './v2/pages/Dashboard.jsx';
-import NumbersV2 from './v2/pages/Numbers.jsx';
-import AdminV2 from './v2/pages/Admin.jsx';
-import AquecimentoV2 from './v2/pages/Aquecimento.jsx';
-import PlaceholderV2 from './v2/pages/Placeholder.jsx';
-import IntegrationsV2 from './v2/pages/Integrations.jsx';
+const DashboardV2    = lazy(() => import('./v2/pages/Dashboard.jsx'));
+const NumbersV2      = lazy(() => import('./v2/pages/Numbers.jsx'));
+const AdminV2        = lazy(() => import('./v2/pages/Admin.jsx'));
+const AquecimentoV2  = lazy(() => import('./v2/pages/Aquecimento.jsx'));
+const PlaceholderV2  = lazy(() => import('./v2/pages/Placeholder.jsx'));
+const IntegrationsV2 = lazy(() => import('./v2/pages/Integrations.jsx'));
+
+// ── Fallback de carregamento ──────────────────────────────────────────────────
+function PageLoader() {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      height: '100vh', background: '#0E1116',
+      color: '#FF6A3D', fontFamily: 'Inter, sans-serif', fontSize: 14,
+    }}>
+      Carregando…
+    </div>
+  );
+}
 
 const V2_PENDING = [
   // Operação
@@ -120,6 +136,7 @@ function App() {
   }, []);
   return (
     <BrowserRouter>
+      <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* Roteamento de versões:
             /v0 = port React do handoff Ruptur OS v3.13, conectado às APIs reais.
@@ -192,6 +209,7 @@ function App() {
         {/* Fallback: rotas desconhecidas → home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
