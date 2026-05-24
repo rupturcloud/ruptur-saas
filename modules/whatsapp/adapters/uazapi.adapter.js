@@ -264,17 +264,20 @@ export class UazapiWhatsappAdapter {
 
   /**
    * Configura webhook da instância no padrão UAZAPI.
+   * ATENÇÃO: o spec usa `addUrlTypesMessages` (com "s" em Types) — não confundir com
+   * `addUrlTypeMessages`. O campo incorreto seria silenciosamente ignorado pela API.
    * @param {string} instanceToken
-   * @param {object} config — { url, enabled, events, addUrlEvents, addUrlTypeMessages }
+   * @param {object} config — { url, enabled, events, addUrlEvents, addUrlTypesMessages }
    */
   async setWebhook(instanceToken, config = {}) {
     return this._withTimeout(
       () => this._client.updateWebhook(instanceToken, {
-        url:                config.url                ?? '',
-        enabled:            config.enabled            ?? true,
-        events:             config.events             ?? ['messages_update'],
-        addUrlEvents:       config.addUrlEvents       ?? false,
-        addUrlTypeMessages: config.addUrlTypeMessages ?? false,
+        url:                 config.url                 ?? '',
+        enabled:             config.enabled             ?? true,
+        events:              config.events              ?? ['messages_update'],
+        addUrlEvents:        config.addUrlEvents        ?? false,
+        // Nome correto per spec: addUrlTypesMessages (plural "Types")
+        addUrlTypesMessages: config.addUrlTypesMessages ?? config.addUrlTypeMessages ?? false,
       }),
       'setWebhook'
     );
