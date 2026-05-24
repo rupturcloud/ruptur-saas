@@ -60,6 +60,14 @@ export async function registerWhatsappRoutes({ req, res, pathname, method, ctx }
     return true;
   }
 
+  // GET /api/v1/whatsapp/numbers/:id/sse — proxy SSE para cliente (S2 sensor)
+  const mSSE = pathname.match(/^\/api\/v1\/whatsapp\/numbers\/([^/]+)\/sse$/);
+  if (mSSE && method === 'GET') {
+    req.params = { id: mSSE[1] };
+    await controller.streamSSE(req, res);
+    return true;
+  }
+
   // GET|POST /api/v1/whatsapp/numbers/:id/webhook
   const mWh = pathname.match(/^\/api\/v1\/whatsapp\/numbers\/([^/]+)\/webhook$/);
   if (mWh) {

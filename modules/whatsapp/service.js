@@ -311,6 +311,19 @@ export class WhatsappService {
 
     return { id, webhook: webhookConfig };
   }
+
+  /**
+   * Proxy SSE — transmite eventos UAZAPI em tempo real para o cliente browser.
+   * Ativa o S2 sensor da doutrina Anduril.
+   */
+  async streamSSE({ tenantId, id, req, res }) {
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
+      throw new BusinessError('ERR_NOT_CONNECTED', 'Instância não conectada ao provider.', 400);
+    }
+    await this.adapter.proxySSE(row.remote_instance_id, req, res);
+  }
 }
 
 export class BusinessError extends Error {

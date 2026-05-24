@@ -156,6 +156,19 @@ export class WhatsappController {
     });
   }
 
+  async streamSSE(req, res) {
+    const tenantId = req.tenantId;
+    const { id } = req.params;
+    try {
+      await this.service.streamSSE({ tenantId, id, req, res });
+    } catch (e) {
+      if (!res.headersSent) {
+        res.writeHead(e.status || 500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: { code: e.code || 'ERR_SSE', message: e.message } }));
+      }
+    }
+  }
+
   async _handle(res, fn) {
     try {
       const { data, meta = {}, status = 200 } = await fn();
