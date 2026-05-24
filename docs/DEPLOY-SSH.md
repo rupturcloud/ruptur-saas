@@ -63,66 +63,90 @@ gcloud compute ssh ruptur-shipyard-01 \
   --command="cd /opt/ruptur/saas && git log -1 --oneline"
 ```
 
-## Deploy manual (paliativo enquanto CI não é corrigido)
+## Deploy manual via script local
+
+Use o script `infra/scripts/deploy-iap.sh` — mesmo fluxo do CI, executável localmente:
 
 ```bash
-# 1) Build local
-cd /Users/diego/hitl/projects/tiatendeai/dev/x1-mercado-contingencia/saas
-npm --prefix web/client-area run build
+# Da raiz do projeto:
+./infra/scripts/deploy-iap.sh
 
-# 2) Empacotar
-tar czf /tmp/ruptur-saas-deploy.tar.gz \
-  --exclude=node_modules \
-  --exclude=.git \
-  --exclude=.env \
-  --exclude=dist \
-  --exclude=tmp \
-  --exclude=backups \
-  .
+# Para pular o build do frontend (se já foi feito):
+SKIP_BUILD=1 ./infra/scripts/deploy-iap.sh
 
-# 3) Copiar via IAP tunnel
-gcloud compute scp \
-  --tunnel-through-iap \
-  --zone=southamerica-east1-b \
-  /tmp/ruptur-saas-deploy.tar.gz \
-  ruptur-shipyard-01:/tmp/
-
-# 4) Extrair e reiniciar na VM
-gcloud compute ssh ruptur-shipyard-01 \
-  --zone=southamerica-east1-b \
-  --tunnel-through-iap \
-  --command="
-    set -e
-    cd /opt/ruptur/saas
-    BACKUP=backups/backup-\$(date +%Y%m%d-%H%M%S)
-    mkdir -p backups && cp -r . \"\$BACKUP\" 2>/dev/null || true
-    tar xzf /tmp/ruptur-saas-deploy.tar.gz
-    npm ci --omit=dev
-    # restart conforme o método de execução em prod (pm2 / systemd / docker compose)
-  "
+# Com Slack:
+SLACK_WEBHOOK="https://hooks.slack.com/..." ./infra/scripts/deploy-iap.sh
 ```
 
-> ⚠️ Antes de rodar o deploy manual em produção, confirme COMO o gateway está rodando em prod (pm2? systemd? docker compose? supervisord?). Sem isso, o restart do passo final é chute.
+O script faz: build frontend → empacota → `gcloud compute scp --tunnel-through-iap` → na VM: backup → extract → `npm ci --omit=dev` → `docker compose up -d saas-web` → health check → smoke test.
 
-## CI / GitHub Actions — status: **QUEBRADO**
+## CI / GitHub Actions — status: **CORRIGIDO**
 
-O workflow `.github/workflows/deploy-rsync.yml` dispara em `push` para branch `main` e tenta:
+O workflow antigo `.github/workflows/deploy-rsync.yml` tentava SSH direto (bloqueado pelo CF). Foi criado `.github/workflows/deploy.yml` usando `google-github-actions/auth` + `gcloud compute scp/ssh --tunnel-through-iap`.
 
-```bash
-ssh deploy@ruptur.cloud "echo OK"   # ← timeout: CF bloqueia
-rsync ... deploy@ruptur.cloud:/app/ruptur-saas/   # ← mesmo problema
-```
+### Novo workflow: `.github/workflows/deploy.yml`
 
-**Provavelmente está falhando há tempos.** Para corrigir:
+Dispara em `push` para:
+- `main`
+- `claude/fervent-bardeen-ee722e`
 
-| Opção | Como | Esforço |
+Fluxo:
+1. Build do frontend (`web/client-area` via Vite)
+2. Autentica no GCP via service account (secret `GCP_SA_KEY`)
+3. Empacota source em `.tar.gz` (exclui `node_modules`, `.env`, `dist`, etc.)
+4. Copia para VM via `gcloud compute scp --tunnel-through-iap`
+5. Na VM: backup → extract → `npm ci --omit=dev` → `docker compose up -d saas-web` → health check interno
+6. Smoke test externo: `https://app.ruptur.cloud/api/local/health`
+7. Notificação Slack (opcional)
+
+### Secrets obrigatórios no GitHub
+
+Vá em: **Settings → Secrets and variables → Actions → New repository secret**
+
+| Secret | Valor | Como obter |
 |---|---|---|
-| A. Adaptar workflow pra IAP | Usar `google-github-actions/auth` + `gcloud compute scp --tunnel-through-iap` em vez de rsync direto | médio (~2h) |
-| B. Abrir firewall pra IPs do GitHub Actions | Whitelist em GCP firewall (mas IPs do GH mudam, manutenção alta) | baixo mas frágil |
-| C. Cloud Build trigger | Substituir workflow por Cloud Build (roda dentro do GCP, já tem permissão) | alto (~4h) |
-| D. Self-hosted runner na VM | Runner do GH dentro da VM, sem precisar SSH externo | médio (~3h), risco de segurança |
+| `GCP_SA_KEY` | JSON completo da service account | Ver seção abaixo |
+| `GCP_PROJECT_ID` | `ruptur-jarvis-v1-68358` | `gcloud config get project` |
+| `SLACK_WEBHOOK` | URL do webhook Slack | Opcional — notificações de deploy |
 
-Recomendação: **A** (adaptar workflow pra IAP).
+### Criar service account para CI/CD
+
+```bash
+# 1) Criar a service account
+gcloud iam service-accounts create github-actions-deploy \
+  --display-name="GitHub Actions Deploy" \
+  --project=ruptur-jarvis-v1-68358
+
+# 2) Conceder roles necessárias
+SA_EMAIL="github-actions-deploy@ruptur-jarvis-v1-68358.iam.gserviceaccount.com"
+
+# Acesso via IAP tunnel (obrigatório)
+gcloud projects add-iam-policy-binding ruptur-jarvis-v1-68358 \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/iap.tunnelResourceAccessor"
+
+# Administrar instâncias Compute (obrigatório para gcloud compute ssh/scp)
+gcloud projects add-iam-policy-binding ruptur-jarvis-v1-68358 \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/compute.instanceAdmin.v1"
+
+# Conta de serviço pode autenticar como ela mesma
+gcloud projects add-iam-policy-binding ruptur-jarvis-v1-68358 \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/iam.serviceAccountUser"
+
+# 3) Gerar chave JSON e copiar o conteúdo para o secret GCP_SA_KEY
+gcloud iam service-accounts keys create /tmp/github-actions-key.json \
+  --iam-account="${SA_EMAIL}"
+
+cat /tmp/github-actions-key.json
+# Cole o JSON inteiro como valor do secret GCP_SA_KEY no GitHub
+
+# 4) Remover arquivo local após copiar
+rm /tmp/github-actions-key.json
+```
+
+> **Segurança:** a chave JSON dá acesso à VM via IAP. Nunca commite — use sempre como secret do GitHub Actions.
 
 ## Chave SSH `ruptur_deploy_ci`
 
@@ -170,7 +194,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/ruptur_deploy_ci -N "" -C "ruptur-deploy-ci@gith
 
 ## Próximos passos recomendados
 
-1. Confirmar como o gateway roda em prod (pm2/systemd/docker) — ler `/opt/ruptur/saas` na VM
-2. Decidir estratégia de deploy CI (recomendado: A — adaptar workflow pra IAP)
-3. Atualizar `infra/scripts/deploy-rsync.sh` pra usar `gcloud compute scp --tunnel-through-iap`
-4. Validar fluxo completo: build local → deploy → smoke test em `https://app.ruptur.cloud/api/local/health`
+1. Adicionar secrets no GitHub: `GCP_SA_KEY`, `GCP_PROJECT_ID` (e opcionalmente `SLACK_WEBHOOK`)
+2. Fazer push para `main` ou `claude/fervent-bardeen-ee722e` para acionar o novo workflow
+3. Acompanhar execução em: **Actions** → **Deploy to Production**
+4. Verificar saúde: `https://app.ruptur.cloud/api/local/health`

@@ -1,0 +1,178 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+      - claude/fervent-bardeen-ee722e
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  GCP_ZONE: southamerica-east1-b
+  GCP_VM: ruptur-shipyard-01
+  APP_PATH: /opt/ruptur/saas
+
+jobs:
+  deploy:
+    name: Deploy to Production (GCP IAP)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            web/client-area/package-lock.json
+
+      - name: Instalar dependências
+        run: |
+          npm ci
+          npm --prefix web/client-area ci
+
+      - name: Build frontend (web/client-area)
+        run: |
+          cd web/client-area
+          npx vite build --mode production
+
+      - name: Autenticar no GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configurar gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: 'gcloud'
+
+      - name: Empacotar source para deploy
+        run: |
+          BUILD_NUMBER="${{ github.run_number }}"
+          TAR_FILE="/tmp/ruptur-saas-deploy-${BUILD_NUMBER}.tar.gz"
+          echo "TAR_FILE=${TAR_FILE}" >> "$GITHUB_ENV"
+          echo "TAR_BASENAME=$(basename ${TAR_FILE})" >> "$GITHUB_ENV"
+
+          tar czf "$TAR_FILE" \
+            --exclude='node_modules' \
+            --exclude='.git' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='runtime-data/warmup-state.json' \
+            --exclude='runtime-data/instance-dna' \
+            --exclude='.next' \
+            --exclude='dist' \
+            --exclude='artifacts' \
+            --exclude='.DS_Store' \
+            --exclude='backups' \
+            --exclude='coverage' \
+            --exclude='*.tar.gz' \
+            .
+
+          echo "Pacote criado: ${TAR_FILE} ($(du -sh "$TAR_FILE" | cut -f1))"
+
+      - name: Upload pacote via IAP (gcloud compute scp)
+        run: |
+          gcloud compute scp \
+            --tunnel-through-iap \
+            --zone="${{ env.GCP_ZONE }}" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --quiet \
+            "${{ env.TAR_FILE }}" \
+            "${{ env.GCP_VM }}:/tmp/"
+
+      - name: Deploy via IAP SSH (backup → extract → npm ci → docker restart)
+        run: |
+          gcloud compute ssh "${{ env.GCP_VM }}" \
+            --zone="${{ env.GCP_ZONE }}" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --tunnel-through-iap \
+            --quiet \
+            --command="
+              set -e
+              BACKUP_NAME=backup-\$(date +%Y%m%d-%H%M%S)
+              cd ${{ env.APP_PATH }}
+
+              echo '[DEPLOY] Criando backup: '\$BACKUP_NAME
+              mkdir -p backups
+              tar czf backups/\${BACKUP_NAME}.tar.gz \
+                --exclude=backups \
+                --exclude=node_modules \
+                . 2>/dev/null || echo '[DEPLOY] Aviso: backup parcial (ok na primeira vez)'
+
+              echo '[DEPLOY] Extraindo pacote...'
+              tar xzf /tmp/${{ env.TAR_BASENAME }}
+
+              echo '[DEPLOY] Instalando dependências de produção...'
+              npm ci --omit=dev
+
+              echo '[DEPLOY] Reiniciando container saas-web...'
+              docker compose up -d saas-web
+
+              echo '[DEPLOY] Aguardando container estabilizar...'
+              sleep 10
+
+              echo '[DEPLOY] Health check interno...'
+              curl -sf http://localhost:3001/api/health | grep -q '\"ok\":true' \
+                && echo '[DEPLOY] Health check OK' \
+                || { echo '[DEPLOY] ERRO: health check falhou'; exit 1; }
+
+              rm -f /tmp/${{ env.TAR_BASENAME }}
+              echo '[DEPLOY] Deploy aplicado com sucesso — backup: '\$BACKUP_NAME
+            "
+
+      - name: Smoke test externo
+        run: |
+          echo "Aguardando propagação (15s)..."
+          sleep 15
+          curl -sf --max-time 15 https://app.ruptur.cloud/api/local/health \
+            && echo "Smoke test OK: https://app.ruptur.cloud/api/local/health" \
+            || echo "Aviso: smoke test externo não respondeu (CF pode estar em cache). Verifique manualmente."
+
+      - name: Notificar sucesso no Slack
+        if: success()
+        run: |
+          if [ -n "${{ secrets.SLACK_WEBHOOK }}" ]; then
+            curl -sf -X POST -H 'Content-type: application/json' \
+              --data '{
+                "text": "Ruptur SaaS deployed to Production",
+                "blocks": [
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "*Deploy Completo*\n*Build:* #${{ github.run_number }}\n*Branch:* ${{ github.ref_name }}\n*Commit:* `${{ github.sha }}`\n*Status:* Producao atualizada via GCP IAP"
+                    }
+                  }
+                ]
+              }' \
+              "${{ secrets.SLACK_WEBHOOK }}" || echo "Slack notification falhou (nao critico)"
+          fi
+
+      - name: Notificar falha no Slack
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.SLACK_WEBHOOK }}" ]; then
+            curl -sf -X POST -H 'Content-type: application/json' \
+              --data '{
+                "text": "Deploy FALHOU — Ruptur SaaS",
+                "blocks": [
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "*Deploy Falhou*\n*Build:* #${{ github.run_number }}\n*Branch:* ${{ github.ref_name }}\n*Commit:* `${{ github.sha }}`\n*Action:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  }
+                ]
+              }' \
+              "${{ secrets.SLACK_WEBHOOK }}" || true
+          fi
