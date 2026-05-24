@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Icon, Button, Avatar } from '../../ds/index.js';
+import { Icon } from '../../ds/index.js';
+import { useAuth } from '../../contexts/AuthContext.jsx';
 
 const NAV = [
   { section: 'Operação', items: [
@@ -29,61 +31,311 @@ const NAV = [
   ]},
 ];
 
-function Sidebar() {
+function Sidebar({ collapsed, onToggle }) {
+  const navigate = useNavigate();
+  const { session, tenant } = useAuth();
+
+  const userName =
+    session?.user?.user_metadata?.full_name ||
+    session?.user?.email?.split('@')[0] ||
+    'Usuário';
+
+  const userInitials = userName
+    .split(' ')
+    .map(w => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+
+  const planLabel = tenant?.plan || tenant?.name || 'Free';
+
   return (
-    <aside className="sidebar">
-      <div className="side-brand">
-        <div className="side-logo">R</div>
-        <div>
-          <div className="side-brand-name">Ruptur OS</div>
-          <div className="side-brand-sub">Revenue OS · AI</div>
-        </div>
-      </div>
-      <div className="side-workspace">
-        <div className="side-ws-avatar">CR</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="side-ws-name">Cervejaria Riacho</div>
-          <div className="side-ws-plan">Plano Growth · 14 vendedores</div>
-        </div>
-        <Icon name="chevDown" size={14} />
-      </div>
-      {NAV.map(g => (
-        <div key={g.section} className="side-section">
-          <div className="side-section-label">{g.section}</div>
-          <nav className="side-nav">
-            {g.items.map(it => (
-              <NavLink
-                key={it.id}
-                to={`/v0/${it.id}`}
-                className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}
-              >
-                <Icon name={it.icon} size={15} />
-                <span>{it.label}</span>
-                {it.badge != null && (
-                  <span className={`badge badge-${it.badgeTone || 'brand'}`}>{it.badge}</span>
-                )}
-              </NavLink>
-            ))}
-          </nav>
-        </div>
-      ))}
-      <div className="side-spacer" />
-      <div className="side-user">
-        <Avatar name="Mariana Souza" presence="online" idx={1} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="side-user-name">Mariana Souza</div>
-          <div className="side-user-role">Admin · SDR Lead</div>
-        </div>
-        <NavLink
-          to="/v0/landing"
-          className="btn btn-ghost btn-icon"
-          style={{ color: 'var(--side-mute)' }}
-          title="Sair"
+    <aside
+      style={{
+        position: 'relative',
+        flexShrink: 0,
+        width: collapsed ? 56 : 240,
+        transition: 'width 0.2s ease',
+        background: '#0E1116',
+        borderRight: '1px solid rgba(255,255,255,0.06)',
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Botão toggle collapse */}
+      <button
+        onClick={onToggle}
+        title={collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+        style={{
+          position: 'absolute',
+          right: -12,
+          top: 20,
+          width: 24,
+          height: 24,
+          borderRadius: '50%',
+          background: '#1F2937',
+          border: '1px solid rgba(255,255,255,0.1)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#9CA3AF',
+          zIndex: 10,
+          fontSize: 14,
+          lineHeight: 1,
+        }}
+      >
+        {collapsed ? '›' : '‹'}
+      </button>
+
+      {/* Logo / Brand */}
+      <div
+        style={{
+          padding: collapsed ? '16px 0' : '16px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            background: '#FF6A3D',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 13,
+            fontWeight: 800,
+            color: '#fff',
+            flexShrink: 0,
+          }}
         >
-          <Icon name="logout" size={14} />
-        </NavLink>
+          R
+        </div>
+        {!collapsed && (
+          <div style={{ overflow: 'hidden' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#F9FAFB', whiteSpace: 'nowrap' }}>
+              Ruptur OS
+            </div>
+            <div style={{ fontSize: 10, color: '#6B7280', whiteSpace: 'nowrap' }}>
+              Revenue OS · AI
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Área de navegação — scroll independente */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          paddingBottom: 8,
+        }}
+      >
+        {NAV.map(g => (
+          <div key={g.section} style={{ marginBottom: 4 }}>
+            {!collapsed && (
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: '#4B5563',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  padding: '10px 14px 4px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {g.section}
+              </div>
+            )}
+            {collapsed && <div style={{ height: 8 }} />}
+            <nav>
+              {g.items.map(it => (
+                <NavLink
+                  key={it.id}
+                  to={`/v0/${it.id}`}
+                  title={collapsed ? it.label : undefined}
+                  className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: collapsed ? 0 : 9,
+                    padding: collapsed ? '9px 0' : '7px 12px',
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    margin: '0 4px',
+                    borderRadius: 7,
+                    textDecoration: 'none',
+                    color: '#9CA3AF',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    transition: 'background 0.12s, color 0.12s',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Icon name={it.icon} size={15} />
+                  {!collapsed && <span style={{ flex: 1 }}>{it.label}</span>}
+                  {!collapsed && it.badge != null && (
+                    <span className={`badge badge-${it.badgeTone || 'brand'}`}>{it.badge}</span>
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+        ))}
+      </div>
+
+      {/* Rodapé fixo com perfil do usuário — NUNCA some da viewport */}
+      <div
+        style={{
+          flexShrink: 0,
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          background: '#0E1116',
+        }}
+      >
+        {collapsed ? (
+          /* Collapsed: só avatar centralizado */
+          <div
+            style={{
+              padding: '12px 0',
+              display: 'flex',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: '#FF6A3D',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 12,
+                fontWeight: 700,
+                color: '#fff',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+              title={userName}
+              onClick={() => navigate('/v0/admin')}
+            >
+              {userInitials}
+            </div>
+          </div>
+        ) : (
+          /* Expanded: avatar + nome + plano + ícone de configurações */
+          <div style={{ padding: '10px 8px' }}>
+            <UserProfileRow
+              userInitials={userInitials}
+              userName={userName}
+              planLabel={planLabel}
+              onClick={() => navigate('/v0/admin')}
+            />
+          </div>
+        )}
       </div>
     </aside>
+  );
+}
+
+function UserProfileRow({ userInitials, userName, planLabel, onClick }) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        borderRadius: 8,
+        padding: '8px 10px',
+        cursor: 'pointer',
+        background: hovered ? 'rgba(255,255,255,0.05)' : 'transparent',
+        transition: 'background 0.12s',
+      }}
+    >
+      {/* Avatar */}
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          background: '#FF6A3D',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 13,
+          fontWeight: 700,
+          color: '#fff',
+          flexShrink: 0,
+        }}
+      >
+        {userInitials}
+      </div>
+
+      {/* Nome + plano */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: '#F9FAFB',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {userName}
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: '#9CA3AF',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: '#22C55E',
+              display: 'inline-block',
+              flexShrink: 0,
+            }}
+          />
+          {planLabel}
+        </div>
+      </div>
+
+      {/* Ícone de configurações */}
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#6B7280"
+        strokeWidth="2"
+        style={{ flexShrink: 0 }}
+      >
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    </div>
   );
 }
 
@@ -96,7 +348,9 @@ function Topbar() {
         <input className="input" placeholder="Buscar leads, contas, conversas…" />
       </div>
       <div className="topbar-actions">
-        <Button variant="ghost" icon="bell" size="sm" />
+        <button className="btn btn-ghost btn-icon" aria-label="Notificações">
+          <Icon name="bell" size={15} />
+        </button>
         <button
           onClick={() => navigate('/v0/founder')}
           title="Founder Mode"
@@ -109,25 +363,56 @@ function Topbar() {
         >
           F
         </button>
-        <Button variant="primary" size="sm" icon="plus" onClick={() => navigate('/v0/leads?new=1')}>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => navigate('/v0/leads?new=1')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        >
+          <Icon name="plus" size={13} />
           Novo lead
-        </Button>
+        </button>
       </div>
     </div>
   );
 }
 
 export default function AppShell() {
+  const [collapsed, setCollapsed] = useState(() => {
+    return localStorage.getItem('sidebar-collapsed') === 'true';
+  });
+
+  function toggleSidebar() {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem('sidebar-collapsed', String(next));
+  }
+
   return (
-    <div className="shell">
-      <Sidebar />
-      <div className="main">
+    <div
+      style={{
+        display: 'flex',
+        height: '100vh',
+        overflow: 'hidden',
+      }}
+    >
+      <Sidebar collapsed={collapsed} onToggle={toggleSidebar} />
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          minWidth: 0,
+        }}
+      >
         <Topbar />
-        <div className="page">
+        <div
+          className="page"
+          style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}
+        >
           <Outlet />
         </div>
       </div>
     </div>
   );
 }
-
