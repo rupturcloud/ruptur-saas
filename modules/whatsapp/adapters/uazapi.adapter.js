@@ -12,15 +12,113 @@
  *  - Operações de instância → header `token: <instanceToken>`
  *  - O `token` retornado no createInstance é o identificador E credencial da instância.
  *    NÃO confundir com `id` (UUID interno) — o `token` é o que vai em todas as chamadas.
+ *
+ * Resiliência:
+ *  - Timeout de 8s em todas as chamadas HTTP via AbortSignal.timeout(8000)
+ *  - Cache de último estado conhecido por instância (TTL 5 min)
+ *  - Circuit breaker: abre após 3 falhas consecutivas em 30s
  */
 import { UazapiAdapter as LowLevelUazapi } from '../../provider-adapter/uazapi-adapter.js';
+
+const TIMEOUT_MS        = 8000;
+const CACHE_TTL_MS      = 5 * 60 * 1000; // 5 minutos
+const CB_THRESHOLD      = 3;             // falhas consecutivas para abrir circuito
+const CB_RESET_MS       = 30 * 1000;    // 30s — janela do circuit breaker
 
 export class UazapiWhatsappAdapter {
   constructor({ adminToken, serverUrl, instanceToken } = {}) {
     this._client = new LowLevelUazapi({ adminToken, serverUrl, instanceToken });
-    this._serverUrl = serverUrl || 'https://free.uazapi.com';
+    this._serverUrl  = serverUrl || 'https://free.uazapi.com';
     this._adminToken = adminToken;
+
+    // Cache de último estado conhecido: instanceToken → { status, phone, lastSeen, cachedAt }
+    this._stateCache = new Map();
+
+    // Circuit breaker por instância: instanceToken → { count, lastFailAt }
+    this._failures = new Map();
   }
+
+  // ─── helpers de resiliência ────────────────────────────────────────────────
+
+  /**
+   * Retorna true se o circuito está aberto para a instância (não tentar request).
+   */
+  _isCircuitOpen(instanceToken) {
+    const f = this._failures.get(instanceToken);
+    if (!f) return false;
+    if (f.count < CB_THRESHOLD) return false;
+    return (Date.now() - f.lastFailAt) < CB_RESET_MS;
+  }
+
+  /**
+   * Registra falha e atualiza contador do circuit breaker.
+   */
+  _recordFailure(instanceToken) {
+    const prev = this._failures.get(instanceToken) || { count: 0, lastFailAt: 0 };
+    this._failures.set(instanceToken, {
+      count:      prev.count + 1,
+      lastFailAt: Date.now(),
+    });
+  }
+
+  /**
+   * Reseta o circuit breaker (chamado após sucesso).
+   */
+  _resetFailures(instanceToken) {
+    this._failures.delete(instanceToken);
+  }
+
+  /**
+   * Busca cache de estado com TTL de 5min.
+   * @returns {object|null}
+   */
+  _getCached(instanceToken) {
+    const cached = this._stateCache.get(instanceToken);
+    if (!cached) return null;
+    if ((Date.now() - cached.cachedAt) > CACHE_TTL_MS) return null;
+    return cached;
+  }
+
+  /**
+   * Persiste estado no cache.
+   */
+  _saveCache(instanceToken, state) {
+    this._stateCache.set(instanceToken, { ...state, cachedAt: Date.now() });
+  }
+
+  /**
+   * Aplica timeout de 8s ao fetch do cliente de baixo nível.
+   * Sobrescreve temporariamente o método fetchJson do _client para injetar o signal.
+   * Retorna a promise do callback, capturando AbortError.
+   *
+   * @param {() => Promise<any>} fn — função que chama this._client.*
+   * @param {string} label — descrição para a mensagem de erro
+   */
+  async _withTimeout(fn, label = 'chamada UAZAPI') {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    // Injeta o signal no fetchJson do cliente de baixo nível para este request
+    const originalFetchJson = this._client.fetchJson.bind(this._client);
+    this._client.fetchJson = async (url, init = {}, fallbackMessage) => {
+      return originalFetchJson(url, { ...init, signal: controller.signal }, fallbackMessage);
+    };
+
+    try {
+      const result = await fn();
+      return result;
+    } catch (err) {
+      if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+        throw new Error(`UAZAPI timeout após 8s (${label})`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+      this._client.fetchJson = originalFetchJson;
+    }
+  }
+
+  // ─── interface pública ─────────────────────────────────────────────────────
 
   /**
    * Cria instância UAZAPI.
@@ -31,7 +129,10 @@ export class UazapiWhatsappAdapter {
    * subsequentes como header `token`.
    */
   async createInstance({ name }) {
-    const res = await this._client.createInstance({ name });
+    const res = await this._withTimeout(
+      () => this._client.createInstance({ name }),
+      'createInstance'
+    );
     // A UAZAPI retorna: { token, id, name, status, ... }
     // `token` é o identificador de autenticação da instância.
     // `id` é o UUID interno — NÃO serve para autenticar chamadas.
@@ -54,7 +155,10 @@ export class UazapiWhatsappAdapter {
    * @param {{ phone?: string }} opts — phone → pairing code; omitido → QR code
    */
   async startSession(instanceToken, { phone } = {}) {
-    const res = await this._client.connectInstance(instanceToken, phone ? { phone } : {});
+    const res = await this._withTimeout(
+      () => this._client.connectInstance(instanceToken, phone ? { phone } : {}),
+      'startSession'
+    );
     // UAZAPI /instance/connect retorna { connected, loggedIn, jid, instance }
     // QR fica em instance.qrcode; paircode em instance.paircode
     const inst = res?.instance || {};
@@ -66,36 +170,66 @@ export class UazapiWhatsappAdapter {
   }
 
   /**
-   * Estado da sessão (connected / disconnected / connecting).
+   * Estado da sessão (CONNECTED / DISCONNECTED / PENDING / TIMEOUT…).
    *
-   * O spec /instance/status retorna:
-   *   {
-   *     instance: { status: "connected"|"disconnected"|"connecting", owner, lastDisconnect, ... },
-   *     status:   { connected: bool, loggedIn: bool, jid: { user, server, ... } }
-   *   }
-   *
-   * - status textual → res.instance.status (string)
-   * - phone          → res.status.jid.user (NÃO res.status.status.jid.user — duplo .status era bug)
-   * - lastSeen       → res.instance.lastDisconnect
+   * Comportamento de resiliência:
+   *  - Circuito aberto (≥3 falhas em <30s) → retorna cache sem tentar UAZAPI
+   *  - Falha de rede ou timeout → tenta retornar cache (<5min) com fromCache: true
+   *  - Sucesso → salva no cache e reseta circuit breaker
    *
    * @param {string} instanceToken
-   * @returns {{ status: string, phone: string|null, lastSeen: string|null }}
+   * @returns {{ status, phone, lastSeen, fromCache?: boolean }}
    */
   async getStatus(instanceToken) {
-    const res = await this._client.getInstanceStatus(instanceToken);
-    // res.instance = objeto Instance (tem .status como string de texto)
-    const inst      = res?.instance || {};
-    // res.status   = objeto { connected: bool, loggedIn: bool, jid: { user, server, ... } }
-    const statusObj = res?.status   || {};
-    // status textual: prioridade para inst.status (spec garante "connected"|"disconnected"|"connecting")
-    const textStatus = inst.status
-      || (statusObj.connected ? 'connected' : statusObj.loggedIn ? 'connected' : null)
-      || 'disconnected';
-    return {
-      status:   textStatus,
-      phone:    statusObj?.jid?.user || inst.owner || null,
-      lastSeen: inst.lastDisconnect  || null,
-    };
+    // Circuit breaker: circuito aberto — retorna cache diretamente
+    if (this._isCircuitOpen(instanceToken)) {
+      const cached = this._getCached(instanceToken);
+      if (cached) {
+        const { cachedAt: _c, ...state } = cached;
+        return { ...state, fromCache: true };
+      }
+      // Sem cache e circuito aberto: relança para não suprimir silenciosamente
+      throw new Error(`UAZAPI indisponível (circuit breaker aberto) e sem cache para ${instanceToken}`);
+    }
+
+    try {
+      const res = await this._withTimeout(
+        () => this._client.getInstanceStatus(instanceToken),
+        'getStatus'
+      );
+
+      // O spec retorna: { instance: { status, owner, ... }, status: { connected, loggedIn, jid } }
+      // - status textual fica em res.instance.status (ex: "connected", "disconnected", "connecting")
+      // - status.connected/loggedIn são booleanos em res.status (nível raiz, não res.status.status)
+      // - phone (número do usuário) fica em res.status.jid.user (não res.status.status.jid.user)
+      const inst   = res?.instance || {};
+      const statusObj = res?.status || {};     // { connected: bool, loggedIn: bool, jid: {...} }
+      const textStatus = inst.status
+        || (statusObj.connected ? 'connected' : statusObj.loggedIn ? 'connected' : null)
+        || 'disconnected';
+      const state = {
+        status:   textStatus,
+        lastSeen: inst.lastDisconnect || res?.lastSeen || res?.last_seen || null,
+        phone:    statusObj?.jid?.user || inst.owner || null,
+      };
+
+      // Sucesso: persiste cache e reseta circuit breaker
+      this._saveCache(instanceToken, state);
+      this._resetFailures(instanceToken);
+
+      return state;
+    } catch (err) {
+      this._recordFailure(instanceToken);
+
+      // Tenta servir do cache antes de relançar
+      const cached = this._getCached(instanceToken);
+      if (cached) {
+        const { cachedAt: _c, ...state } = cached;
+        return { ...state, fromCache: true };
+      }
+
+      throw err;
+    }
   }
 
   /**
@@ -105,7 +239,10 @@ export class UazapiWhatsappAdapter {
    * @param {string} instanceToken
    */
   async getHealth(instanceToken) {
-    const res = await this._client.getInstanceStatus(instanceToken);
+    const res = await this._withTimeout(
+      () => this._client.getInstanceStatus(instanceToken),
+      'getHealth'
+    );
     return {
       uptime:       res?.uptime        ?? null,
       msgsToday:    res?.msgsToday     ?? res?.messagesToday ?? null,
@@ -119,25 +256,28 @@ export class UazapiWhatsappAdapter {
    * @param {string} instanceToken
    */
   async getWebhook(instanceToken) {
-    return this._client.getWebhook(instanceToken);
+    return this._withTimeout(
+      () => this._client.getWebhook(instanceToken),
+      'getWebhook'
+    );
   }
 
   /**
    * Configura webhook da instância no padrão UAZAPI.
-   * ATENÇÃO: o spec usa `addUrlTypesMessages` (com "s" em Types) — não confundir com
-   * `addUrlTypeMessages`. O campo incorreto seria silenciosamente ignorado pela API.
    * @param {string} instanceToken
-   * @param {object} config — { url, enabled, events, addUrlEvents, addUrlTypesMessages }
+   * @param {object} config — { url, enabled, events, addUrlEvents, addUrlTypeMessages }
    */
   async setWebhook(instanceToken, config = {}) {
-    return this._client.updateWebhook(instanceToken, {
-      url:                 config.url                 ?? '',
-      enabled:             config.enabled             ?? true,
-      events:              config.events              ?? ['messages_update'],
-      addUrlEvents:        config.addUrlEvents        ?? false,
-      // Nome correto per spec: addUrlTypesMessages (plural "Types")
-      addUrlTypesMessages: config.addUrlTypesMessages ?? config.addUrlTypeMessages ?? false,
-    });
+    return this._withTimeout(
+      () => this._client.updateWebhook(instanceToken, {
+        url:                config.url                ?? '',
+        enabled:            config.enabled            ?? true,
+        events:             config.events             ?? ['messages_update'],
+        addUrlEvents:       config.addUrlEvents       ?? false,
+        addUrlTypeMessages: config.addUrlTypeMessages ?? false,
+      }),
+      'setWebhook'
+    );
   }
 
   /**
@@ -145,7 +285,10 @@ export class UazapiWhatsappAdapter {
    * @param {string} instanceToken
    */
   async disconnect(instanceToken) {
-    return this._client.disconnectInstance(instanceToken);
+    return this._withTimeout(
+      () => this._client.disconnectInstance(instanceToken),
+      'disconnect'
+    );
   }
 
   /**
@@ -153,7 +296,61 @@ export class UazapiWhatsappAdapter {
    * @param {string} instanceToken
    */
   async deleteInstance(instanceToken) {
-    return this._client.deleteInstance(instanceToken);
+    return this._withTimeout(
+      () => this._client.deleteInstance(instanceToken),
+      'deleteInstance'
+    );
+  }
+
+  /**
+   * Proxy SSE: faz pipe do endpoint GET /sse da UAZAPI para a resposta do cliente.
+   * Necessário porque o browser não pode chamar free.uazapi.com diretamente (CORS).
+   *
+   * @param {string} instanceToken — valor de remote_instance_id (= token UAZAPI)
+   * @param {object} req — Node.js IncomingMessage (para detectar close do cliente)
+   * @param {object} res — Node.js ServerResponse (para enviar a stream SSE)
+   */
+  async proxySSE(instanceToken, req, res) {
+    const url = `${this._serverUrl}/sse`;
+
+    // Envia headers SSE para o cliente antes de qualquer dado
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    const controller = new AbortController();
+    req.on('close', () => controller.abort());
+
+    try {
+      const upstream = await fetch(url, {
+        headers: { token: instanceToken },
+        signal: controller.signal,
+      });
+
+      if (!upstream.ok) {
+        res.write('event: error\ndata: {"error":"upstream failed"}\n\n');
+        res.end();
+        return;
+      }
+
+      // Pipe do reader de stream para a resposta HTTP
+      const reader = upstream.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(decoder.decode(value, { stream: true }));
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: e.message })}\n\n`);
+      }
+    } finally {
+      res.end();
+    }
   }
 }
 
