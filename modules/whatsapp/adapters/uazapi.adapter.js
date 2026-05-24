@@ -55,10 +55,13 @@ export class UazapiWhatsappAdapter {
    */
   async startSession(instanceToken, { phone } = {}) {
     const res = await this._client.connectInstance(instanceToken, phone ? { phone } : {});
+    // UAZAPI /instance/connect retorna { connected, loggedIn, jid, instance }
+    // QR fica em instance.qrcode; paircode em instance.paircode
+    const inst = res?.instance || {};
     return {
-      qrCode:      res?.qrcode      || res?.qr           || null,
-      pairingCode: res?.pairingCode || res?.paircode     || null,
-      status:      res?.status                           || 'PENDING',
+      qrCode:      inst.qrcode      || res?.qrcode      || res?.qr          || null,
+      pairingCode: inst.paircode    || res?.paircode    || res?.pairingCode  || null,
+      status:      res?.connected   ? 'connected' : (res?.loggedIn ? 'connected' : 'PENDING'),
     };
   }
 

@@ -83,6 +83,14 @@ export const whatsappApi = {
   },
 
   /**
+   * Exclui uma instância (remove do UAZAPI + banco).
+   * @param {string} id
+   */
+  deleteNumber(id) {
+    return http.delete('/whatsapp/numbers/:id', { params: { id } });
+  },
+
+  /**
    * Desconecta a instância do provider WhatsApp.
    * @param {string} id
    */

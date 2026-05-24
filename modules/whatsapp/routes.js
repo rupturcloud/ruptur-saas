@@ -38,11 +38,16 @@ export async function registerWhatsappRoutes({ req, res, pathname, method, ctx }
     return true;
   }
 
-  // PATCH /api/v1/whatsapp/numbers/:id
+  // PATCH|DELETE /api/v1/whatsapp/numbers/:id
   const m2 = pathname.match(/^\/api\/v1\/whatsapp\/numbers\/([^/]+)$/);
   if (m2 && method === 'PATCH') {
     req.params = { id: m2[1] };
     await controller.updateNumber(req, res);
+    return true;
+  }
+  if (m2 && method === 'DELETE') {
+    req.params = { id: m2[1] };
+    await controller.deleteNumber(req, res);
     return true;
   }
 

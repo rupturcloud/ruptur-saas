@@ -162,6 +162,27 @@ export class WhatsappService {
   }
 
   /**
+   * Exclui uma instância: desconecta + deleta no UAZAPI (best-effort) + remove do banco.
+   */
+  async deleteNumber({ tenantId, id }) {
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+
+    const remoteId = row.remote_instance_id;
+    if (remoteId && !remoteId.startsWith('pending-')) {
+      try {
+        await this.adapter.deleteInstance(remoteId);
+      } catch (e) {
+        // Ignora: instância pode ter expirado (free server: 1h) ou já deletada
+        console.warn('[whatsapp.service] deleteInstance provider (ignorado):', e?.message);
+      }
+    }
+
+    await this.repo.delete({ id, tenantId });
+    return { id, deleted: true };
+  }
+
+  /**
    * Atualiza apenas a config do aquecimento sem alterar enabled/pct/score.
    */
   async updateWarmupConfig({ tenantId, id, config }) {

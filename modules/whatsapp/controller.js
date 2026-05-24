@@ -109,6 +109,15 @@ export class WhatsappController {
     });
   }
 
+  async deleteNumber(req, res) {
+    return this._handle(res, async () => {
+      const tenantId = req.tenantId;
+      const { id } = req.params;
+      const data = await this.service.deleteNumber({ tenantId, id });
+      return { data, status: 200 };
+    });
+  }
+
   async updateWarmupConfig(req, res) {
     return this._handle(res, async () => {
       const tenantId = req.tenantId;

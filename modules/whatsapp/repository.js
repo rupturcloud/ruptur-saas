@@ -149,6 +149,30 @@ export class WhatsappRepository {
   }
 
   /**
+   * Remove uma instância do banco (hard delete).
+   * Não exclui no provider UAZAPI — isso é responsabilidade do service.
+   * @param {string} id — id da instance_registry
+   * @param {string} tenantId — garante que só o tenant dono pode excluir
+   */
+  async delete({ id, tenantId }) {
+    const { data: row, error: e1 } = await this.db
+      .from('instance_registry')
+      .select('id, tenant_providers!inner ( tenant_id )')
+      .eq('id', id)
+      .eq('tenant_providers.tenant_id', tenantId)
+      .maybeSingle();
+    if (e1) throw e1;
+    if (!row) throw Object.assign(new Error('Número não encontrado.'), { code: 'ERR_NOT_FOUND', status: 404 });
+
+    const { error: e2 } = await this.db
+      .from('instance_registry')
+      .delete()
+      .eq('id', id);
+    if (e2) throw e2;
+    return { id };
+  }
+
+  /**
    * Faz merge parcial em metadata (JSON) sem sobrescrever outros campos.
    * @param {string} id
    * @param {object} patch — chaves do nível raiz do metadata a mesclar
