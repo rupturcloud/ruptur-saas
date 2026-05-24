@@ -23,8 +23,9 @@ const NAV = [
     { id: 'insights',   label: 'Insights',   icon: 'sparkles' },
   ]},
   { section: 'Sistema', items: [
-    { id: 'webhooks', label: 'Webhooks',      icon: 'zap' },
-    { id: 'admin',    label: 'Configurações', icon: 'settings' },
+    { id: 'integrations', label: 'Integrações',   icon: 'zap' },
+    { id: 'webhooks',     label: 'Webhooks',      icon: 'zap' },
+    { id: 'admin',        label: 'Configurações', icon: 'settings' },
   ]},
 ];
 

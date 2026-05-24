@@ -280,19 +280,20 @@ export class WhatsappService {
    * Configura webhook da instância.
    * Salva no metadata local + aplica no provider UAZAPI se já conectado.
    *
-   * @param {object} config — { url, enabled, events, addUrlEvents, addUrlTypeMessages }
+   * @param {object} config — { url, enabled, events, addUrlEvents, addUrlTypesMessages }
    */
   async setWebhook({ tenantId, id, config }) {
     const row = await this.repo.findById({ tenantId, id });
     if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
 
     // Normaliza config seguindo padrão UAZAPI
+    // ATENÇÃO: campo correto per spec é addUrlTypesMessages (plural) — não addUrlTypeMessages
     const webhookConfig = {
-      url:                config.url             ?? '',
-      enabled:            config.enabled         ?? true,
-      events:             config.events          ?? ['messages_update'],
-      addUrlEvents:       config.addUrlEvents    ?? false,
-      addUrlTypeMessages: config.addUrlTypeMessages ?? false,
+      url:                 config.url               ?? '',
+      enabled:             config.enabled           ?? true,
+      events:              config.events            ?? ['messages_update'],
+      addUrlEvents:        config.addUrlEvents      ?? false,
+      addUrlTypesMessages: config.addUrlTypesMessages ?? config.addUrlTypeMessages ?? false,
     };
 
     // Persiste localmente
@@ -328,6 +329,18 @@ function toNumberDTO(row) {
   // fusedState: estado fundido pelo InstanceFusionService (persiste via mergeMetadata)
   const fusedMeta   = row.metadata?.fusedState || null;
 
+  // Dados de free tier: account_kind vem do JOIN com provider_accounts
+  const accountKind = row.provider_accounts?.account_kind || row.account_kind || 'free';
+  // Usa first_seen_at (data de criação da instância) para calcular expiração do trial de 1h
+  const createdAt = row.first_seen_at || row.created_at;
+  const trialDurationMs = 60 * 60 * 1000; // 1 hora em ms
+  const trialExpiresAt = accountKind === 'free' && createdAt
+    ? new Date(new Date(createdAt).getTime() + trialDurationMs).toISOString()
+    : null;
+  const trialExpired = accountKind === 'free' && createdAt
+    ? Date.now() > new Date(createdAt).getTime() + trialDurationMs
+    : false;
+
   return {
     id: row.id,
     name: row.instance_name || row.name,
@@ -337,6 +350,9 @@ function toNumberDTO(row) {
     platform: row.platform || null,
     lastSeenAt: row.last_seen_at,
     updatedAt: row.updated_at,
+    accountKind,
+    trialExpiresAt,
+    trialExpired,
     // Campos de configuração de envio (persistidos em metadata.config)
     delay:      configMeta.delay      ?? 3,
     dailyLimit: configMeta.dailyLimit ?? 500,
@@ -346,8 +362,9 @@ function toNumberDTO(row) {
       url:                webhookMeta.url                ?? configMeta.webhookUrl ?? '',
       enabled:            webhookMeta.enabled            ?? true,
       events:             webhookMeta.events             ?? ['messages_update'],
-      addUrlEvents:       webhookMeta.addUrlEvents       ?? false,
-      addUrlTypeMessages: webhookMeta.addUrlTypeMessages ?? false,
+      addUrlEvents:        webhookMeta.addUrlEvents        ?? false,
+      // addUrlTypesMessages é o nome correto per spec (suporta legado addUrlTypeMessages)
+      addUrlTypesMessages: webhookMeta.addUrlTypesMessages ?? webhookMeta.addUrlTypeMessages ?? false,
     },
     warmup: {
       enabled:   warmupMeta.enabled   || false,

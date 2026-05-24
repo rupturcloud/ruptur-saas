@@ -47,6 +47,7 @@ import NumbersV2 from './v2/pages/Numbers.jsx';
 import AdminV2 from './v2/pages/Admin.jsx';
 import AquecimentoV2 from './v2/pages/Aquecimento.jsx';
 import PlaceholderV2 from './v2/pages/Placeholder.jsx';
+import IntegrationsV2 from './v2/pages/Integrations.jsx';
 
 const V2_PENDING = [
   // Operação
@@ -177,6 +178,7 @@ function App() {
                   <Route path="numbers" element={<NumbersV2 />} />
                   <Route path="aquecimento" element={<AquecimentoV2 />} />
                   <Route path="admin" element={<AdminV2 />} />
+                  <Route path="integrations" element={<IntegrationsV2 />} />
                   {V2_PENDING.map(id => (
                     <Route key={id} path={id} element={<PlaceholderV2 name={id} />} />
                   ))}

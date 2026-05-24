@@ -66,15 +66,35 @@ export class UazapiWhatsappAdapter {
   }
 
   /**
-   * Estado da sessão (CONNECTED / DISCONNECTED / PENDING / TIMEOUT…).
+   * Estado da sessão (connected / disconnected / connecting).
+   *
+   * O spec /instance/status retorna:
+   *   {
+   *     instance: { status: "connected"|"disconnected"|"connecting", owner, lastDisconnect, ... },
+   *     status:   { connected: bool, loggedIn: bool, jid: { user, server, ... } }
+   *   }
+   *
+   * - status textual → res.instance.status (string)
+   * - phone          → res.status.jid.user (NÃO res.status.status.jid.user — duplo .status era bug)
+   * - lastSeen       → res.instance.lastDisconnect
+   *
    * @param {string} instanceToken
+   * @returns {{ status: string, phone: string|null, lastSeen: string|null }}
    */
   async getStatus(instanceToken) {
     const res = await this._client.getInstanceStatus(instanceToken);
+    // res.instance = objeto Instance (tem .status como string de texto)
+    const inst      = res?.instance || {};
+    // res.status   = objeto { connected: bool, loggedIn: bool, jid: { user, server, ... } }
+    const statusObj = res?.status   || {};
+    // status textual: prioridade para inst.status (spec garante "connected"|"disconnected"|"connecting")
+    const textStatus = inst.status
+      || (statusObj.connected ? 'connected' : statusObj.loggedIn ? 'connected' : null)
+      || 'disconnected';
     return {
-      status:   res?.status   || res?.state  || 'OFFLINE',
-      lastSeen: res?.lastSeen || res?.last_seen || null,
-      phone:    res?.status?.status?.jid?.user || res?.owner || null,
+      status:   textStatus,
+      phone:    statusObj?.jid?.user || inst.owner || null,
+      lastSeen: inst.lastDisconnect  || null,
     };
   }
 
@@ -104,16 +124,19 @@ export class UazapiWhatsappAdapter {
 
   /**
    * Configura webhook da instância no padrão UAZAPI.
+   * ATENÇÃO: o spec usa `addUrlTypesMessages` (com "s" em Types) — não confundir com
+   * `addUrlTypeMessages`. O campo incorreto seria silenciosamente ignorado pela API.
    * @param {string} instanceToken
-   * @param {object} config — { url, enabled, events, addUrlEvents, addUrlTypeMessages }
+   * @param {object} config — { url, enabled, events, addUrlEvents, addUrlTypesMessages }
    */
   async setWebhook(instanceToken, config = {}) {
     return this._client.updateWebhook(instanceToken, {
-      url:                config.url                ?? '',
-      enabled:            config.enabled            ?? true,
-      events:             config.events             ?? ['messages_update'],
-      addUrlEvents:       config.addUrlEvents       ?? false,
-      addUrlTypeMessages: config.addUrlTypeMessages ?? false,
+      url:                 config.url                 ?? '',
+      enabled:             config.enabled             ?? true,
+      events:              config.events              ?? ['messages_update'],
+      addUrlEvents:        config.addUrlEvents        ?? false,
+      // Nome correto per spec: addUrlTypesMessages (plural "Types")
+      addUrlTypesMessages: config.addUrlTypesMessages ?? config.addUrlTypeMessages ?? false,
     });
   }
 

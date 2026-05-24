@@ -16,7 +16,7 @@ export class WhatsappRepository {
     this.db = supabase;
   }
 
-  /** Lista todos os números do tenant (join com tenant_providers). */
+  /** Lista todos os números do tenant (join com tenant_providers e provider_accounts). */
   async listByTenant(tenantId) {
     const { data, error } = await this.db
       .from('instance_registry')
@@ -31,6 +31,8 @@ export class WhatsappRepository {
         metadata,
         last_seen_at,
         updated_at,
+        first_seen_at,
+        provider_accounts ( account_kind ),
         tenant_providers!inner ( id, tenant_id, provider, account_id )
       `)
       .eq('tenant_providers.tenant_id', tenantId)
@@ -44,6 +46,7 @@ export class WhatsappRepository {
       .from('instance_registry')
       .select(`
         *,
+        provider_accounts ( account_kind ),
         tenant_providers!inner ( id, tenant_id, provider, account_id, credentials_ref )
       `)
       .eq('id', id)
