@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/purity */
 /**
  * Numbers — M5 Instâncias WhatsApp + M6 Aquecimento
  *
@@ -15,6 +16,7 @@ import {
 import { whatsappApi } from '../../api/whatsapp.api.js';
 import { useToast } from '../../ds/toast.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { useInstanceSSE } from '../../hooks/useInstanceSSE.js';
 
 // ---------------------------------------------------------------------------
 // Utilitários
@@ -112,6 +114,19 @@ const STYLES = `
 
   /* Modal overlay */
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 1100; }
+
+  /* HITL — estados de confiança */
+  .inst-card.hitl-lost { border-color: #FCA5A5; box-shadow: 0 0 0 1px #FCA5A5; }
+  .inst-hitl-banner { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; margin-bottom: 10px; font-size: 11.5px; font-weight: 600; }
+  .inst-hitl-banner.uncertain { background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; }
+  .inst-hitl-banner.lost { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; }
+  .inst-hitl-banner .hitl-msg { flex: 1; }
+  .inst-hitl-banner button { padding: 3px 9px; border-radius: 6px; border: none; cursor: pointer; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .inst-hitl-banner.uncertain button { background: #FEF3C7; color: #78350F; }
+  .inst-hitl-banner.uncertain button:hover { background: #FDE68A; }
+  .inst-hitl-banner.lost button { background: #FEE2E2; color: #B91C1C; }
+  .inst-hitl-banner.lost button:hover { background: #FECACA; }
+  .inst-hitl-badge-lost { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #FEE2E2; color: #B91C1C; }
 `;
 
 // ---------------------------------------------------------------------------
@@ -415,7 +430,7 @@ function QRConnectModal({ inst, onClose }) {
 // ---------------------------------------------------------------------------
 // Instance Card
 // ---------------------------------------------------------------------------
-function InstanceCard({ inst, health, onConnect, onReconnect, onConfig, onDisconnect }) {
+function InstanceCard({ inst, health, onConnect, onReconnect, onConfig, onDisconnect, onDelete }) {
   const warmup = inst._warmup || 'cold';
   const warmupLabel = { hot: 'Aquecido', warming: 'Em aquecimento', cold: 'Frio' };
   const warmupColor = { hot: '#25D366', warming: '#FF6A3D', cold: '#9CA3AF' };
@@ -426,21 +441,86 @@ function InstanceCard({ inst, health, onConnect, onReconnect, onConfig, onDiscon
   const uptime = health?.uptime != null ? `${health.uptime}%` : '—';
   const sparkline = health?.sparkline || [0, 0, 0, 0, 0, 0, 0];
 
+  // ── HITL: estados de confiança (fallback graceful se fusedState ausente) ──
+  const fusedState = inst.fusedState || null;
+  const trackingMode = fusedState?.trackingMode ?? 'STABLE';
+  const needsHITL = fusedState?.needsHITL === true || trackingMode === 'UNCERTAIN';
+  const isLost = trackingMode === 'LOST';
+  const confidence = fusedState?.confidence ?? 1.0;
+
+  // Segundos desde a última confirmação (useMemo para evitar Date.now() impuro no render)
+  const secsSince = useMemo(() => {
+    if (!inst.lastSeenAt) return null;
+    return Math.floor((Date.now() - new Date(inst.lastSeenAt).getTime()) / 1000);
+  }, [inst.lastSeenAt]);
+  const sinceLabel = secsSince != null
+    ? (secsSince < 60 ? `${secsSince}s` : `${Math.floor(secsSince / 60)}min`)
+    : null;
+
+  // Verificar agora: chama status e injeta resultado no polling local (log por ora)
+  const [verifying, setVerifying] = useState(false);
+  const handleVerify = useCallback(async () => {
+    setVerifying(true);
+    try {
+      const res = await whatsappApi.status(inst.id);
+      const st = (res?.data?.status || res?.status || '').toLowerCase();
+      // Sinal injetado no polling — quando SSE estiver ativo, irá para o fusion bus
+      console.debug('[HITL] verify result', { instanceId: inst.id, status: st, confidence: 0.85 });
+    } catch (e) {
+      console.warn('[HITL] verify error', e?.message);
+    } finally {
+      setVerifying(false);
+    }
+  }, [inst.id]);
+
+  // Card base class — borda vermelha sutil quando LOST
+  const cardClass = ['inst-card', isLost ? 'hitl-lost' : ''].filter(Boolean).join(' ');
+
   return (
-    <div className="inst-card">
+    <div className={cardClass}>
+      {/* ── Banner HITL: UNCERTAIN (mostra apenas quando confidence < 0.8 e não é LOST) ── */}
+      {!isLost && needsHITL && confidence < 0.8 && (
+        <div className="inst-hitl-banner uncertain">
+          <span style={{ fontSize: 13 }}>⚠️</span>
+          <span className="hitl-msg">
+            Estado incerto{sinceLabel ? ` · última confirmação ${sinceLabel} atrás` : ''}
+          </span>
+          <button onClick={handleVerify} disabled={verifying}>
+            {verifying ? 'Verificando…' : 'Verificar agora'}
+          </button>
+        </div>
+      )}
+
+      {/* ── Banner HITL: LOST ── */}
+      {isLost && (
+        <div className="inst-hitl-banner lost">
+          <span style={{ fontSize: 13 }}>🔴</span>
+          <span className="hitl-msg">Instância perdida · contato com o provider falhou</span>
+          <button onClick={onReconnect}>Reconectar</button>
+        </div>
+      )}
+
       <div className="inst-head">
         <div className="inst-avatar">{(inst.name || '?').slice(0, 2).toUpperCase()}</div>
         <div className="inst-info">
           <div className="inst-name">{inst.name}</div>
           <div className="inst-phone">{inst.phone || 'aguardando QR'}</div>
         </div>
-        <span className={`inst-state ${inst._state}`}>
-          {inst._state === 'connected' && <><span className="dot" />Conectado</>}
-          {inst._state === 'connecting' && (
-            <><svg width="10" height="10" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="40 20" /></svg>Conectando</>
-          )}
-          {inst._state === 'disconnected' && <><span className="dot" />Desconectado</>}
-        </span>
+        {/* Badge de status — substituído por "Instância perdida" quando LOST */}
+        {isLost ? (
+          <span className="inst-hitl-badge-lost">
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
+            Instância perdida
+          </span>
+        ) : (
+          <span className={`inst-state ${inst._state}`}>
+            {inst._state === 'connected' && <><span className="dot" />Conectado</>}
+            {inst._state === 'connecting' && (
+              <><svg width="10" height="10" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="40 20" /></svg>Conectando</>
+            )}
+            {inst._state === 'disconnected' && <><span className="dot" />Desconectado</>}
+          </span>
+        )}
       </div>
 
       <Sparkline data={sparkline} className="inst-spark" />
@@ -474,7 +554,10 @@ function InstanceCard({ inst, health, onConnect, onReconnect, onConfig, onDiscon
       </div>
 
       <div className="inst-actions">
-        {inst._state === 'connected' ? (
+        {/* Quando LOST: botão "Reconectar" com destaque primário na área de ações */}
+        {isLost ? (
+          <Button variant="primary" size="sm" onClick={onReconnect}>Reconectar</Button>
+        ) : inst._state === 'connected' ? (
           <Button variant="secondary" size="sm" onClick={onDisconnect}>Desconectar</Button>
         ) : inst._state === 'disconnected' ? (
           <Button variant="primary" size="sm" onClick={onReconnect}>Reconectar</Button>
@@ -482,6 +565,14 @@ function InstanceCard({ inst, health, onConnect, onReconnect, onConfig, onDiscon
           <Button variant="primary" size="sm" onClick={onConnect}>Conectar QR</Button>
         )}
         <Button variant="ghost" size="sm" onClick={onConfig}>Config</Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDelete}
+          style={{ color: 'var(--red-500,#EF4444)', marginLeft: 'auto' }}
+        >
+          Excluir
+        </Button>
       </div>
     </div>
   );
@@ -499,19 +590,22 @@ const WEBHOOK_EVENTS = [
 ];
 
 function InstanceConfigDrawer({ inst, onClose, onSave }) {
-  const wh = inst.metadata?.webhook || {};
+  // Lê webhookConfig do DTO (populado pelo backend a partir de metadata.webhook)
+  const wh = inst.webhookConfig || inst.metadata?.webhook || {};
+  const { toast } = useToast?.() ?? { toast: () => {} };
   const [draft, setDraft] = useState({
-    name:               inst.name         || '',
-    webhookUrl:         inst.webhookUrl   || wh.url      || '',
-    webhookEnabled:     wh.enabled        ?? true,
-    webhookEvents:      wh.events         ?? ['messages_update'],
-    addUrlEvents:       wh.addUrlEvents   ?? false,
-    addUrlTypeMessages: wh.addUrlTypeMessages ?? false,
-    delay:              inst.delay        ?? 3,
-    dailyLimit:         inst.dailyLimit   ?? 500,
+    name:               inst.name               || '',
+    webhookUrl:         inst.webhookUrl         || wh.url               || '',
+    webhookEnabled:     wh.enabled              ?? true,
+    webhookEvents:      wh.events               ?? ['messages_update'],
+    addUrlEvents:       wh.addUrlEvents         ?? false,
+    addUrlTypeMessages: wh.addUrlTypeMessages   ?? false,
+    delay:              inst.delay              ?? 3,
+    dailyLimit:         inst.dailyLimit         ?? 500,
   });
-  const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState(null);
+  const [saving, setSaving]   = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError]     = useState(null);
 
   function toggleEvent(ev) {
     setDraft(d => ({
@@ -526,14 +620,12 @@ function InstanceConfigDrawer({ inst, onClose, onSave }) {
     setSaving(true);
     setError(null);
     try {
-      // 1. Salva config geral (nome, delay, limite)
       const res = await whatsappApi.updateNumber(inst.id, {
         name:       draft.name,
         webhookUrl: draft.webhookUrl,
         delay:      draft.delay,
         dailyLimit: draft.dailyLimit,
       });
-      // 2. Salva config de webhook completa no padrão UAZAPI
       await whatsappApi.setWebhook(inst.id, {
         url:                draft.webhookUrl,
         enabled:            draft.webhookEnabled,
@@ -541,10 +633,24 @@ function InstanceConfigDrawer({ inst, onClose, onSave }) {
         addUrlEvents:       draft.addUrlEvents,
         addUrlTypeMessages: draft.addUrlTypeMessages,
       });
+      toast?.('✅ Configurações salvas.');
       onSave(res?.data || draft);
     } catch (e) {
       setError(e?.message || 'Erro ao salvar.');
       setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`Excluir instância "${inst.name}"? Esta ação é irreversível.`)) return;
+    setDeleting(true);
+    try {
+      await whatsappApi.deleteNumber(inst.id);
+      toast?.('🗑 Instância excluída.');
+      onSave({ __delete: true, id: inst.id });
+    } catch (e) {
+      setError(e?.message || 'Erro ao excluir.');
+      setDeleting(false);
     }
   }
 
@@ -643,10 +749,11 @@ function InstanceConfigDrawer({ inst, onClose, onSave }) {
 
         <div style={{ borderTop: '1px solid var(--ink-150,#ECEEF1)', paddingTop: 14 }}>
           <button
-            onClick={() => { if (window.confirm(`Excluir instância "${inst.name}"? Esta ação é irreversível.`)) onSave({ __delete: true, id: inst.id }); }}
-            style={{ width: '100%', padding: '10px 14px', background: '#FEF2F2', color: 'var(--danger,#DC2626)', border: '1px solid #FECACA', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+            onClick={handleDelete}
+            disabled={deleting}
+            style={{ width: '100%', padding: '10px 14px', background: '#FEF2F2', color: 'var(--danger,#DC2626)', border: '1px solid #FECACA', borderRadius: 8, cursor: deleting ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13, opacity: deleting ? 0.6 : 1 }}
           >
-            🗑 Excluir instância
+            {deleting ? 'Excluindo…' : '🗑 Excluir instância'}
           </button>
         </div>
       </div>
@@ -1006,6 +1113,21 @@ function NewNumberModal({ onClose, onCreate }) {
 }
 
 // ---------------------------------------------------------------------------
+// InstanceSSESensor — helper que chama useInstanceSSE por instância.
+// React não permite hooks em loops; este componente renderiza null e
+// serve apenas para montar/desmontar o sensor SSE com lifecycle correto.
+// ---------------------------------------------------------------------------
+function InstanceSSESensor({ instanceId, onStateChange }) {
+  // eslint-disable-next-line no-unused-vars
+  const { status } = useInstanceSSE(instanceId, {
+    onStateChange,
+    enabled: true,
+  });
+  // Sensor inativo até o proxy backend ser implementado — sem log em produção
+  return null; // renderiza nada — apenas gerencia o lifecycle do sensor
+}
+
+// ---------------------------------------------------------------------------
 // Numbers — componente principal
 // ---------------------------------------------------------------------------
 export default function Numbers() {
@@ -1079,6 +1201,14 @@ export default function Numbers() {
     return () => clearInterval(tid);
   }, [instances, loadHealth]);
 
+  // Callback SSE: quando o sensor receber um evento de estado, injeta no polling local.
+  // Por ora apenas loga — quando o proxy SSE estiver implementado, irá atualizar o state.
+  const handleSSEStateChange = useCallback((signal) => {
+    console.debug('[Numbers] SSE signal recebido:', signal);
+    // TODO (Próximo sprint): atualizar instances state com o sinal do fusion bus
+    // setInstances(prev => prev.map(x => x.id === signal.instanceId ? { ...x, ... } : x));
+  }, []);
+
   // Ao abrir modal QR (instância existe) — só exibe o modal, ele chama connect()
   const handleConnect = (inst) => setQrModal(inst);
 
@@ -1128,9 +1258,21 @@ export default function Numbers() {
   const hotCount = instances.filter(i => i._warmup === 'hot').length;
   const warmingCount = instances.filter(i => i._warmup !== 'hot').length;
 
+  // Instâncias ativas (connected ou connecting) para montar os sensores SSE
+  const sseTargets = instances.filter(i => i._state === 'connected' || i._state === 'connecting');
+
   return (
     <>
       <style>{STYLES}</style>
+
+      {/* Sensores SSE: um por instância ativa — renderizam null, apenas gerenciam lifecycle */}
+      {sseTargets.map(inst => (
+        <InstanceSSESensor
+          key={inst.id}
+          instanceId={inst.id}
+          onStateChange={handleSSEStateChange}
+        />
+      ))}
 
       <PageHeader
         title="Números"
@@ -1188,7 +1330,6 @@ export default function Numbers() {
                   onConfig={() => setConfigDrawer(inst)}
                   onDisconnect={async () => {
                     if (window.confirm(`Desconectar ${inst.name}?`)) {
-                      // Otimista: atualiza local imediatamente
                       setInstances(prev => prev.map(x => x.id === inst.id
                         ? { ...x, _state: 'disconnected', status: 'disconnected' }
                         : x));
@@ -1196,6 +1337,18 @@ export default function Numbers() {
                         await whatsappApi.disconnect(inst.id);
                       } catch (e) {
                         toast?.('⚠️ Erro ao desconectar: ' + (e?.message || 'tente novamente'));
+                      }
+                    }
+                  }}
+                  onDelete={async () => {
+                    if (window.confirm(`Excluir "${inst.name}"? Esta ação é irreversível.`)) {
+                      setInstances(prev => prev.filter(x => x.id !== inst.id));
+                      try {
+                        await whatsappApi.deleteNumber(inst.id);
+                        toast?.('🗑 Número excluído.');
+                      } catch (e) {
+                        toast?.('⚠️ Erro ao excluir: ' + (e?.message || 'tente novamente'));
+                        loadNumbers(); // reverte lista em caso de erro
                       }
                     }
                   }}

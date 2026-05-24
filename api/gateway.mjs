@@ -48,6 +48,7 @@ import {
 } from '../middleware/validation.mjs';
 import { PlatformAdminService } from '../modules/superadmin/platform-admin.service.js';
 import { UazapiAccountService } from '../modules/providers/uazapi-account.service.js';
+import { TokenVault } from '../modules/providers/token-vault.service.js';
 import { PaymentGatewayAccountService } from '../modules/billing/payment-gateway-account.service.js';
 import { CommercialAdminService, missingCommercialTable } from '../modules/admin/commercial-admin.service.js';
 import { listIntegrationPresets } from '../modules/integrations-core/index.js';
@@ -137,6 +138,7 @@ if (webhookQueueService) {
 const tenantService = supabase ? new TenantService(supabase) : null;
 const platformAdminService = supabase ? new PlatformAdminService(supabase, null) : null;
 const uazapiAccountService = supabase ? new UazapiAccountService(supabase) : null;
+const tokenVault = new TokenVault({ supabase });
 const paymentGatewayAccountService = supabase ? new PaymentGatewayAccountService(supabase) : null;
 const commercialAdminService = supabase ? new CommercialAdminService(supabase) : null;
 const analyticsService = supabase ? new AnalyticsService(supabase) : null;
@@ -677,12 +679,9 @@ async function handler(req, res) {
       supabase,
       tenantId,
       user,
-      // Credenciais UAZAPI: por ora env var. Próximo passo: resolver via
-      // tenant_providers.credentials_ref (Supabase Vault).
-      uazapiCredentials: {
-        serverUrl:   process.env.UAZAPI_FREE_SERVER_URL  || 'https://free.uazapi.com',
-        adminToken:  process.env.UAZAPI_FREE_ADMIN_TOKEN || process.env.UAZAPI_ADMIN_TOKEN,
-      },
+      // Credenciais UAZAPI resolvidas via TokenVault (Supabase > env fallback).
+      // TTL tracking incluso — alerta quando token < 10min restantes.
+      uazapiCredentials: await tokenVault.getCredentials(),
     };
 
     if (await registerWhatsappRoutes({ req, res, pathname, method: req.method, ctx })) return;
@@ -1518,6 +1517,8 @@ async function handler(req, res) {
     try {
       const body = await parseBody(req);
       const account = await uazapiAccountService.rotateAccount(providerRotateMatch[1], body.adminToken || body.admin_token, adminUser.id);
+      // Invalida vault para próximo request usar token novo sem aguardar cache de 30s
+      tokenVault.invalidate();
       return json(res, 200, { account }, req);
     } catch (e) {
       const migrationError = providerMigrationError(e);
@@ -1582,6 +1583,57 @@ async function handler(req, res) {
     } catch (e) {
       const migrationError = providerMigrationError(e);
       return json(res, migrationError ? 503 : (e.status || 400), { error: migrationError || e.message }, req);
+    }
+  }
+
+  // --- Admin: TokenVault — status e atualização do admintoken UAZAPI ---
+
+  // GET /api/admin/uazapi/token/status — status do token (TTL, alerta)
+  if (pathname === '/api/admin/uazapi/token/status' && req.method === 'GET') {
+    const adminUser = await requirePlatformAdmin(req, res);
+    if (!adminUser) return;
+
+    try {
+      const status = await tokenVault.getStatus();
+      return json(res, 200, { ok: true, status }, req);
+    } catch (e) {
+      return json(res, 500, { ok: false, error: e.message }, req);
+    }
+  }
+
+  // POST /api/admin/uazapi/token — atualiza token + invalida cache do vault
+  if (pathname === '/api/admin/uazapi/token' && req.method === 'POST') {
+    const adminUser = await requirePlatformAdmin(req, res);
+    if (!adminUser) return;
+    if (!uazapiAccountService) return json(res, 503, { error: 'Supabase não configurado' }, req);
+
+    try {
+      const body = await parseBody(req);
+      const adminToken = String(body.adminToken || body.admin_token || '').trim();
+      if (!adminToken) return json(res, 400, { error: 'adminToken obrigatório' }, req);
+
+      // Atualiza a conta free ativa mais recente
+      const { data: account } = await supabase
+        .from('provider_accounts')
+        .select('id')
+        .eq('account_kind', 'free')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!account?.id) {
+        return json(res, 404, { error: 'Nenhuma conta UAZAPI free ativa encontrada' }, req);
+      }
+
+      await uazapiAccountService.rotateAccount(account.id, adminToken, adminUser.id);
+
+      // Invalida cache imediatamente para próximo request pegar token novo
+      tokenVault.invalidate();
+
+      return json(res, 200, { ok: true, message: 'Token atualizado com sucesso', accountId: account.id }, req);
+    } catch (e) {
+      return json(res, 500, { ok: false, error: e.message }, req);
     }
   }
 

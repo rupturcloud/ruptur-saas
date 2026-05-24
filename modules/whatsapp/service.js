@@ -5,12 +5,16 @@
  * Recebe repository + adapter via construtor (DI).
  */
 
+import { InstanceFusionService } from './fusion.service.js';
+
 export class WhatsappService {
   constructor({ repository, adapter }) {
     if (!repository) throw new Error('WhatsappService requer repository');
     if (!adapter) throw new Error('WhatsappService requer adapter');
     this.repo = repository;
     this.adapter = adapter;
+    // Fusion bus: estado fundido de instâncias (doutrina Anduril)
+    this.fusion = new InstanceFusionService({ repository });
   }
 
   async listNumbers({ tenantId }) {
@@ -66,18 +70,51 @@ export class WhatsappService {
   async getStatus({ tenantId, id }) {
     const row = await this.repo.findById({ tenantId, id });
     if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
-    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
-      return { id, status: row.status || 'connecting' };
+
+    // Carrega estado cacheado do banco como sinal S4 inicial (não começa "cego")
+    const cachedFusedState = row.metadata?.fusedState;
+    if (cachedFusedState) {
+      this.fusion.loadCachedSignal(id, cachedFusedState);
     }
+
+    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
+      return { id, status: row.status || 'connecting', confidence: null, trackingMode: null };
+    }
+
     const remote = await this.adapter.getStatus(row.remote_instance_id);
     const normalized = (remote.status || '').toLowerCase();
+
+    // S1: injeta sinal do HTTP poll no fusion bus
+    if (normalized && normalized !== 'connecting') {
+      const fusionState = normalized === 'connected' ? 'connected' : 'disconnected';
+      this.fusion.injectSignal(id, { source: 'http_poll', state: fusionState, confidence: 1.0 });
+    }
+
+    // Computa estado fundido com todos os sinais disponíveis
+    const fused = this.fusion.computeState(id);
+
     // Atualiza status E número de telefone quando conectado
     if (normalized && (normalized !== row.status || (remote.phone && remote.phone !== row.instance_number))) {
       const statusPatch = { id, status: normalized };
       if (remote.phone) statusPatch.instanceNumber = remote.phone;
       await this.repo.updateStatus(statusPatch);
     }
-    return { id, status: remote.status, phone: remote.phone || null, lastSeen: remote.lastSeen };
+
+    // Persiste estado fundido no metadata (best-effort — non-fatal)
+    if (fused.state !== 'unknown') {
+      this.fusion.persistFusedState(id, fused).catch(() => {/* ignorado */});
+    }
+
+    return {
+      id,
+      status: remote.status,
+      phone: remote.phone || null,
+      lastSeen: remote.lastSeen,
+      // Campos do fusion bus
+      confidence: fused.confidence,
+      trackingMode: fused.trackingMode,
+      needsHITL: fused.needsHITL ?? false,
+    };
   }
 
   async getHealth({ tenantId, id }) {
@@ -285,7 +322,12 @@ export class BusinessError extends Error {
 }
 
 function toNumberDTO(row) {
-  const warmupMeta = row.metadata?.warmup || {};
+  const warmupMeta  = row.metadata?.warmup     || {};
+  const configMeta  = row.metadata?.config     || {};
+  const webhookMeta = row.metadata?.webhook    || {};
+  // fusedState: estado fundido pelo InstanceFusionService (persiste via mergeMetadata)
+  const fusedMeta   = row.metadata?.fusedState || null;
+
   return {
     id: row.id,
     name: row.instance_name || row.name,
@@ -295,13 +337,28 @@ function toNumberDTO(row) {
     platform: row.platform || null,
     lastSeenAt: row.last_seen_at,
     updatedAt: row.updated_at,
+    // Campos de configuração de envio (persistidos em metadata.config)
+    delay:      configMeta.delay      ?? 3,
+    dailyLimit: configMeta.dailyLimit ?? 500,
+    webhookUrl: configMeta.webhookUrl ?? webhookMeta.url ?? '',
+    // Webhook completo (para o drawer carregar os eventos configurados)
+    webhookConfig: {
+      url:                webhookMeta.url                ?? configMeta.webhookUrl ?? '',
+      enabled:            webhookMeta.enabled            ?? true,
+      events:             webhookMeta.events             ?? ['messages_update'],
+      addUrlEvents:       webhookMeta.addUrlEvents       ?? false,
+      addUrlTypeMessages: webhookMeta.addUrlTypeMessages ?? false,
+    },
     warmup: {
-      enabled: warmupMeta.enabled || false,
-      pct: warmupMeta.pct ?? 0,
-      score: warmupMeta.score ?? 32,
-      config: warmupMeta.config || null,
+      enabled:   warmupMeta.enabled   || false,
+      pct:       warmupMeta.pct       ?? 0,
+      score:     warmupMeta.score     ?? 32,
+      config:    warmupMeta.config    || null,
       startedAt: warmupMeta.startedAt || null,
     },
+    // fusedState: estado fundido (doutrina Anduril) — null se ainda não calculado.
+    // O InstanceCard faz fallback graceful quando null (comportamento igual ao anterior).
+    fusedState: fusedMeta,
   };
 }
 
