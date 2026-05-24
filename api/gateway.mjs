@@ -674,6 +674,8 @@ async function handler(req, res) {
     }
     req.tenantId = tenantId;
     req.user = user;
+    // Popula req.query com query string params para todos os handlers /api/v1/
+    req.query = Object.fromEntries(url.searchParams);
 
     const ctx = {
       supabase,

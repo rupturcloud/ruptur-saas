@@ -114,6 +114,25 @@ export const whatsappApi = {
   setWebhook(id, config) {
     return http.post('/whatsapp/numbers/:id/webhook', { params: { id }, body: { config } });
   },
+
+  /**
+   * Lista últimas conversas de uma instância WhatsApp.
+   * @param {string} id — UUID do número no banco
+   * @param {number} [limit=20]
+   */
+  getChats(id, limit = 20) {
+    return http.get('/whatsapp/numbers/:id/chats', { params: { id }, query: { limit } });
+  },
+
+  /**
+   * Busca mensagens de uma conversa específica.
+   * @param {string} id — UUID do número no banco
+   * @param {string} chatId — ID do chat no WhatsApp (ex: 5511999999999@s.whatsapp.net)
+   * @param {number} [limit=50]
+   */
+  getMessages(id, chatId, limit = 50) {
+    return http.get('/whatsapp/numbers/:id/messages', { params: { id }, query: { chatId, limit } });
+  },
 };
 
 export default whatsappApi;

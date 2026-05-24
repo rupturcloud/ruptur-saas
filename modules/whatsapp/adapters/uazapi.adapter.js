@@ -306,6 +306,52 @@ export class UazapiWhatsappAdapter {
   }
 
   /**
+   * Busca últimas conversas (chats) de uma instância.
+   * Usa POST /chat/find com sort por timestamp decrescente.
+   *
+   * @param {string} instanceToken — valor de remote_instance_id
+   * @param {{ limit?: number }} opts
+   * @returns {Array} chats
+   */
+  async getChats(instanceToken, { limit = 20 } = {}) {
+    const res = await this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/chat/find', {
+        method: 'POST',
+        body: {
+          sort:  '-wa_lastMsgTimestamp',
+          limit,
+          offset: 0,
+        },
+      }),
+      'getChats'
+    );
+    return res?.chats || res?.data || [];
+  }
+
+  /**
+   * Busca mensagens de um chat específico.
+   * Usa POST /message/find com chatid e limit.
+   *
+   * @param {string} instanceToken — valor de remote_instance_id
+   * @param {{ chatId: string, limit?: number }} opts
+   * @returns {Array} messages
+   */
+  async getMessages(instanceToken, { chatId, limit = 50 } = {}) {
+    const res = await this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/message/find', {
+        method: 'POST',
+        body: {
+          chatid: chatId,
+          limit,
+          offset: 0,
+        },
+      }),
+      'getMessages'
+    );
+    return res?.messages || res?.data || [];
+  }
+
+  /**
    * Proxy SSE: faz pipe do endpoint GET /sse da UAZAPI para a resposta do cliente.
    * Necessário porque o browser não pode chamar free.uazapi.com diretamente (CORS).
    *

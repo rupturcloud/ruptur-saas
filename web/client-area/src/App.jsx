@@ -51,6 +51,7 @@ const AdminV2        = lazy(() => import('./v2/pages/Admin.jsx'));
 const AquecimentoV2  = lazy(() => import('./v2/pages/Aquecimento.jsx'));
 const PlaceholderV2  = lazy(() => import('./v2/pages/Placeholder.jsx'));
 const IntegrationsV2 = lazy(() => import('./v2/pages/Integrations.jsx'));
+const InboxV2        = lazy(() => import('./v2/pages/Inbox.jsx'));
 
 // ── Fallback de carregamento ──────────────────────────────────────────────────
 function PageLoader() {
@@ -67,7 +68,7 @@ function PageLoader() {
 
 const V2_PENDING = [
   // Operação
-  'pipeline', 'inbox', 'campaigns', 'grupos', 'outreach',
+  'pipeline', 'campaigns', 'grupos', 'outreach',
   'remarketing', 'canais', 'rede-coletiva',
   // Receita
   'business', 'billing', 'growth', 'indicacoes', 'insights',
@@ -196,6 +197,7 @@ function App() {
                   <Route path="aquecimento" element={<AquecimentoV2 />} />
                   <Route path="admin" element={<AdminV2 />} />
                   <Route path="integrations" element={<IntegrationsV2 />} />
+                  <Route path="inbox" element={<InboxV2 />} />
                   {V2_PENDING.map(id => (
                     <Route key={id} path={id} element={<PlaceholderV2 name={id} />} />
                   ))}

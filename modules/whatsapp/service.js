@@ -313,6 +313,42 @@ export class WhatsappService {
   }
 
   /**
+   * Busca últimas conversas (chats) de uma instância.
+   * Retorna lista vazia (sem erro) se a instância ainda não está conectada.
+   *
+   * @param {{ tenantId: string, id: string, limit?: number }} opts
+   */
+  async getChats({ tenantId, id, limit = 20 }) {
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
+      return { id, chats: [] };
+    }
+    try {
+      const chats = await this.adapter.getChats(row.remote_instance_id, { limit });
+      return { id, chats };
+    } catch (e) {
+      console.warn('[whatsapp.service] getChats falhou:', e.message);
+      return { id, chats: [] };
+    }
+  }
+
+  /**
+   * Busca mensagens de um chat específico.
+   *
+   * @param {{ tenantId: string, id: string, chatId: string, limit?: number }} opts
+   */
+  async getMessages({ tenantId, id, chatId, limit = 50 }) {
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
+      return { id, messages: [] };
+    }
+    const messages = await this.adapter.getMessages(row.remote_instance_id, { chatId, limit });
+    return { id, messages };
+  }
+
+  /**
    * Proxy SSE — transmite eventos UAZAPI em tempo real para o cliente browser.
    * Ativa o S2 sensor da doutrina Anduril.
    */

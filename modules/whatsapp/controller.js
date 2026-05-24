@@ -156,6 +156,28 @@ export class WhatsappController {
     });
   }
 
+  async getChats(req, res) {
+    return this._handle(res, async () => {
+      const tenantId = req.tenantId;
+      const { id } = req.params;
+      const limit = req.query?.limit ? Number(req.query.limit) : 20;
+      const data = await this.service.getChats({ tenantId, id, limit });
+      return { data };
+    });
+  }
+
+  async getMessages(req, res) {
+    return this._handle(res, async () => {
+      const tenantId = req.tenantId;
+      const { id } = req.params;
+      const chatId = req.query?.chatId;
+      const limit  = req.query?.limit ? Number(req.query.limit) : 50;
+      if (!chatId) throw new BusinessError('ERR_MISSING_PARAM', 'chatId é obrigatório.', 400);
+      const data = await this.service.getMessages({ tenantId, id, chatId, limit });
+      return { data };
+    });
+  }
+
   async streamSSE(req, res) {
     const tenantId = req.tenantId;
     const { id } = req.params;
