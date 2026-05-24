@@ -5,7 +5,7 @@
  * Recebe repository + adapter via construtor (DI).
  */
 
-import { InstanceFusionService } from './fusion.service.js';
+import { fusionBus } from './fusion.service.js';
 
 export class WhatsappService {
   constructor({ repository, adapter }) {
@@ -13,8 +13,8 @@ export class WhatsappService {
     if (!adapter) throw new Error('WhatsappService requer adapter');
     this.repo = repository;
     this.adapter = adapter;
-    // Fusion bus: estado fundido de instâncias (doutrina Anduril)
-    this.fusion = new InstanceFusionService({ repository });
+    // Fusion bus: singleton de processo — sinais persistem entre requests
+    this.fusion = fusionBus;
   }
 
   async listNumbers({ tenantId }) {
@@ -102,7 +102,7 @@ export class WhatsappService {
 
     // Persiste estado fundido no metadata (best-effort — non-fatal)
     if (fused.state !== 'unknown') {
-      this.fusion.persistFusedState(id, fused).catch(() => {/* ignorado */});
+      this.fusion.persistFusedState(id, fused, this.repo).catch(() => {/* ignorado */});
     }
 
     return {

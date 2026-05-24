@@ -48,8 +48,13 @@ function temporalDecay(ageMs) {
 }
 
 export class InstanceFusionService {
-  constructor({ repository }) {
-    this.repo = repository;
+  /**
+   * @param {{ repository?: object }} opts — repository é opcional.
+   * Para o singleton de processo use fusionBus (exportado abaixo) sem repository;
+   * passe o repo como parâmetro em persistFusedState().
+   */
+  constructor({ repository } = {}) {
+    this.repo = repository || null;
     // Map: instanceId → Signal[]
     this._signals = new Map();
   }
@@ -121,10 +126,13 @@ export class InstanceFusionService {
    * Persiste o estado fundido no metadata da instância (S4 — state cache).
    * @param {string} instanceId
    * @param {object} fusedState
+   * @param {object} [repoOverride] — repository a usar (prevalece sobre this.repo).
+   *   Obrigatório quando usando o singleton fusionBus (que não tem repo próprio).
    */
-  async persistFusedState(instanceId, fusedState) {
+  async persistFusedState(instanceId, fusedState, repoOverride = null) {
+    const repo = repoOverride || this.repo;
     try {
-      await this.repo.mergeMetadata({
+      await repo.mergeMetadata({
         id: instanceId,
         patch: {
           fusedState: {
@@ -167,5 +175,12 @@ export class InstanceFusionService {
     return TRACKING_MODES[trackingMode]?.pollIntervalMs ?? null;
   }
 }
+
+/**
+ * Singleton de processo — compartilhado entre todas as requests.
+ * O Map de sinais persiste enquanto o processo Node estiver em pé.
+ * repository não é passado aqui; passe-o em persistFusedState(id, state, repo).
+ */
+export const fusionBus = new InstanceFusionService();
 
 export default InstanceFusionService;
