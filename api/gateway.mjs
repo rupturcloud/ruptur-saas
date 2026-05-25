@@ -712,6 +712,18 @@ async function handler(req, res) {
     }, req);
   }
 
+  // /api/wallet — stub compatível com WalletContext V1 (balance + transactions)
+  // TODO: implementar carteira real (créditos, saldo, histórico)
+  if (pathname === '/api/wallet' && req.method === 'GET') {
+    return json(res, 200, { balance: 0, transactions: [], credits: 0 }, req);
+  }
+  if (pathname === '/api/wallet/transactions' && req.method === 'GET') {
+    return json(res, 200, { transactions: [], total: 0 }, req);
+  }
+  if (pathname === '/api/wallet/packages' && req.method === 'GET') {
+    return json(res, 200, { packages: [] }, req);
+  }
+
   if (pathname === '/api/billing/plans' && req.method === 'GET') {
     try {
       const plans = await billing.getPlans();
