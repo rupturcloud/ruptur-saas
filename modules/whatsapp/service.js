@@ -103,7 +103,34 @@ export class WhatsappService {
       return { id, status: row.status || 'connecting', confidence: null, trackingMode: null };
     }
 
-    const remote = await this.adapter.getStatus(row.remote_instance_id);
+    let remote;
+    try {
+      remote = await this.adapter.getStatus(row.remote_instance_id);
+    } catch (err) {
+      // Instância expirou no free server (TTL 1h) — retorna estado especial sem relançar
+      if (err?.code === 'ERR_INSTANCE_EXPIRED') {
+        console.warn(`[whatsapp.service] getStatus: instância expirada (${id}) — marcando freeTrialExpired.`);
+        // Atualiza status local para 'disconnected' e registra expiração no metadata
+        await this.repo.updateStatus({ id, status: 'disconnected' });
+        await this.repo.mergeMetadata({ id, patch: { freeTrialExpired: true } }).catch(() => {});
+        // Injeta sinal de desconexão no fusion bus
+        this.fusion.injectSignal(id, { source: 'http_poll', state: 'disconnected', confidence: 1.0 });
+        const fused = this.fusion.computeState(id);
+        return {
+          id,
+          status: 'disconnected',
+          freeTrialExpired: true,
+          phone: null,
+          lastSeen: null,
+          confidence: fused.confidence,
+          trackingMode: 'LOST',
+          needsHITL: true,
+          fusedState: { trackingMode: 'LOST' },
+        };
+      }
+      throw err;
+    }
+
     const normalized = (remote.status || '').toLowerCase();
 
     // S1: injeta sinal do HTTP poll no fusion bus
@@ -351,10 +378,15 @@ export class WhatsappService {
       return { id, chats };
     } catch (e) {
       console.warn('[whatsapp.service] getChats falhou:', e.message);
-      // Expõe token inválido como status desconectado para o frontend saber exibir UI correta
-      const msg = (e?.message || '').toLowerCase();
-      if (msg.includes('invalid token') || msg.includes('not found') || msg.includes('401')) {
-        return { id, chats: [], error: 'INSTANCE_EXPIRED' };
+      // Instância expirada no free server — detectada pelo código do adapter ou pela mensagem
+      const isExpired = e?.code === 'ERR_INSTANCE_EXPIRED' ||
+        (() => {
+          const msg = (e?.message || '').toLowerCase();
+          return msg.includes('invalid token') || msg.includes('not found') ||
+                 msg.includes('401') || msg.includes('404') || msg.includes('unauthorized');
+        })();
+      if (isExpired) {
+        return { id, chats: [], freeTrialExpired: true, error: 'INSTANCE_EXPIRED' };
       }
       return { id, chats: [] };
     }
@@ -373,6 +405,23 @@ export class WhatsappService {
     }
     const messages = await this.adapter.getMessages(row.remote_instance_id, { chatId, limit });
     return { id, messages };
+  }
+
+  /**
+   * Envia mensagem de texto para um chat via UAZAPI.
+   *
+   * @param {{ tenantId: string, id: string, chatId: string, text: string }} opts
+   * @returns {{ id: string, sent: boolean, timestamp: number }}
+   */
+  async sendMessage({ tenantId, id, chatId, text }) {
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    const remoteId = row.remote_instance_id;
+    if (!remoteId || remoteId.startsWith('pending-')) {
+      throw new BusinessError('ERR_NOT_CONNECTED', 'Instância não conectada ao provider.', 400);
+    }
+    await this.adapter.sendMessage(remoteId, { chatId, text });
+    return { id, sent: true, timestamp: Date.now() };
   }
 
   /**
@@ -417,6 +466,10 @@ function toNumberDTO(row) {
     ? Date.now() > new Date(createdAt).getTime() + trialDurationMs
     : false;
 
+  // freeTrialExpired: combinação do cálculo por data E da flag persistida pelo getStatus
+  // quando o adapter confirma que a instância expirou no provider (401/404)
+  const freeTrialExpired = trialExpired || (row.metadata?.freeTrialExpired === true);
+
   return {
     id: row.id,
     name: row.instance_name || row.name,
@@ -429,6 +482,7 @@ function toNumberDTO(row) {
     accountKind,
     trialExpiresAt,
     trialExpired,
+    freeTrialExpired,
     // Campos de configuração de envio (persistidos em metadata.config)
     delay:      configMeta.delay      ?? 3,
     dailyLimit: configMeta.dailyLimit ?? 500,

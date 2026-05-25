@@ -219,6 +219,21 @@ export class UazapiWhatsappAdapter {
 
       return state;
     } catch (err) {
+      // 401/404 → instância expirou no free server (TTL 1h) — não acumula como falha temporária
+      const msg = (err?.message || '').toLowerCase();
+      const isExpired = msg.includes('401') || msg.includes('404') ||
+                        msg.includes('invalid token') || msg.includes('not found') ||
+                        msg.includes('unauthorized');
+      if (isExpired) {
+        // Reseta circuito (não é falha de rede — é expiração conhecida)
+        this._resetFailures(instanceToken);
+        // Limpa cache stale para evitar servir estado antigo como válido
+        this._stateCache.delete(instanceToken);
+        const expiredErr = new Error(`Instância expirada no free server (token: ${instanceToken?.slice(0, 16)}…)`);
+        expiredErr.code = 'ERR_INSTANCE_EXPIRED';
+        throw expiredErr;
+      }
+
       this._recordFailure(instanceToken);
 
       // Tenta servir do cache antes de relançar
@@ -349,6 +364,26 @@ export class UazapiWhatsappAdapter {
       'getMessages'
     );
     return res?.messages || res?.data || [];
+  }
+
+  /**
+   * Envia mensagem de texto para um chat via UAZAPI POST /send/text.
+   *
+   * @param {string} instanceToken — valor de remote_instance_id (= token UAZAPI)
+   * @param {{ chatId: string, text: string }} opts
+   * @returns {object} resposta da UAZAPI
+   */
+  async sendMessage(instanceToken, { chatId, text }) {
+    return this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/send/text', {
+        method: 'POST',
+        body: {
+          number: chatId,
+          text,
+        },
+      }),
+      'sendMessage'
+    );
   }
 
   /**

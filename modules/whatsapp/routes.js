@@ -68,11 +68,16 @@ export async function registerWhatsappRoutes({ req, res, pathname, method, ctx }
     return true;
   }
 
-  // GET /api/v1/whatsapp/numbers/:id/messages?chatId=xxx
+  // GET|POST /api/v1/whatsapp/numbers/:id/messages
   const mMsgs = pathname.match(/^\/api\/v1\/whatsapp\/numbers\/([^/]+)\/messages$/);
   if (mMsgs && method === 'GET') {
     req.params = { id: mMsgs[1] };
     await controller.getMessages(req, res);
+    return true;
+  }
+  if (mMsgs && method === 'POST') {
+    req.params = { id: mMsgs[1] };
+    await controller.sendMessage(req, res);
     return true;
   }
 

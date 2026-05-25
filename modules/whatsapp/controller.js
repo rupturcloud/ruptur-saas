@@ -178,6 +178,19 @@ export class WhatsappController {
     });
   }
 
+  async sendMessage(req, res) {
+    return this._handle(res, async () => {
+      const tenantId = req.tenantId;
+      const { id } = req.params;
+      const { chatId, text } = req.body || {};
+      if (!chatId || !text) {
+        throw new BusinessError('ERR_MISSING_PARAM', 'chatId e text são obrigatórios.', 400);
+      }
+      const data = await this.service.sendMessage({ tenantId, id, chatId, text });
+      return { data, status: 201 };
+    });
+  }
+
   async streamSSE(req, res) {
     const tenantId = req.tenantId;
     const { id } = req.params;

@@ -478,8 +478,17 @@ function InstanceCard({ inst, health, onConnect, onReconnect, onConfig, onDiscon
 
   return (
     <div className={cardClass}>
-      {/* ── Banner HITL: UNCERTAIN (mostra apenas quando confidence < 0.8 e não é LOST) ── */}
-      {!isLost && needsHITL && confidence < 0.8 && (
+      {/* ── Banner: instância expirada (free server TTL 1h) ── */}
+      {inst.freeTrialExpired && (
+        <div className="inst-hitl-banner lost">
+          <span style={{ fontSize: 13 }}>⏱</span>
+          <span className="hitl-msg">Sessão expirada — reconecte para continuar</span>
+          <button onClick={() => onConnect(inst)}>Reconectar QR</button>
+        </div>
+      )}
+
+      {/* ── Banner HITL: UNCERTAIN (mostra apenas quando confidence < 0.8, não LOST e não expirada) ── */}
+      {!inst.freeTrialExpired && !isLost && needsHITL && confidence < 0.8 && (
         <div className="inst-hitl-banner uncertain">
           <span style={{ fontSize: 13 }}>⚠️</span>
           <span className="hitl-msg">
@@ -491,8 +500,8 @@ function InstanceCard({ inst, health, onConnect, onReconnect, onConfig, onDiscon
         </div>
       )}
 
-      {/* ── Banner HITL: LOST ── */}
-      {isLost && (
+      {/* ── Banner HITL: LOST (não expirada — falha de provider) ── */}
+      {!inst.freeTrialExpired && isLost && (
         <div className="inst-hitl-banner lost">
           <span style={{ fontSize: 13 }}>🔴</span>
           <span className="hitl-msg">Instância perdida · contato com o provider falhou</span>
@@ -1200,6 +1209,33 @@ export default function Numbers() {
     const tid = setInterval(() => loadHealth(instances), 30_000);
     return () => clearInterval(tid);
   }, [instances, loadHealth]);
+
+  // Polling de status a cada 30s — detecta expiração de instância free server (TTL 1h)
+  // Quando o backend retorna freeTrialExpired: true, marca a instância no state e para o poll para ela.
+  useEffect(() => {
+    if (instances.length === 0) return;
+    // Só faz poll para instâncias que ainda não foram marcadas como expiradas
+    const targets = instances.filter(i => !i.freeTrialExpired && i._state !== 'connecting');
+    if (targets.length === 0) return;
+
+    const tid = setInterval(async () => {
+      await Promise.allSettled(targets.map(async (inst) => {
+        try {
+          const res = await whatsappApi.status(inst.id);
+          const data = res?.data || res || {};
+          if (data.freeTrialExpired) {
+            // Atualiza o state local — para o poll implicitamente na próxima iteração (targets filtrado)
+            setInstances(prev => prev.map(x =>
+              x.id === inst.id
+                ? { ...x, freeTrialExpired: true, _state: 'disconnected', status: 'disconnected' }
+                : x
+            ));
+          }
+        } catch { /* ignora erros de rede neste poll */ }
+      }));
+    }, 30_000);
+    return () => clearInterval(tid);
+  }, [instances]);
 
   // Callback SSE: quando o sensor receber um evento de estado, injeta no polling local.
   // Por ora apenas loga — quando o proxy SSE estiver implementado, irá atualizar o state.

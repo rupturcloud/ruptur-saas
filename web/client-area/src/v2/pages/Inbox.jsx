@@ -232,7 +232,7 @@ const STYLES = `
     text-align: right;
   }
 
-  /* Footer de reply (placeholder) */
+  /* Footer de reply */
   .inbox-reply-bar {
     padding: 12px 18px;
     background: #1A232A;
@@ -248,11 +248,35 @@ const STYLES = `
     border-radius: 999px;
     border: 1px solid rgba(255,255,255,.1);
     background: rgba(255,255,255,.05);
-    color: rgba(255,255,255,.5);
+    color: rgba(255,255,255,.9);
     font-size: 13px;
     outline: none;
+    cursor: text;
+    transition: border-color .15s;
+  }
+  .inbox-reply-input:focus {
+    border-color: rgba(255,106,61,.5);
+  }
+  .inbox-reply-input::placeholder { color: rgba(255,255,255,.3); }
+  .inbox-reply-send-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--brand-500, #FF6A3D);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: opacity .15s, transform .1s;
+  }
+  .inbox-reply-send-btn:disabled {
+    opacity: .4;
     cursor: not-allowed;
   }
+  .inbox-reply-send-btn:not(:disabled):hover { opacity: .85; }
+  .inbox-reply-send-btn:not(:disabled):active { transform: scale(.92); }
 
   /* Estado vazio e loading */
   .inbox-empty {
@@ -436,6 +460,10 @@ export default function Inbox() {
   // Busca local na lista de chats
   const [search, setSearch]               = useState('');
 
+  // Reply bar
+  const [replyText, setReplyText]         = useState('');
+  const [sendingMsg, setSendingMsg]       = useState(false);
+
   // Ref para bottom scroll
   const bottomRef = useRef(null);
 
@@ -531,6 +559,36 @@ export default function Inbox() {
         );
       })
     : chats;
+
+  // -- Enviar mensagem --
+  async function handleSend() {
+    const text = replyText.trim();
+    if (!text || !selectedInstId || !selectedChat || sendingMsg) return;
+    const chatId = selectedChat.wa_chatid || selectedChat.wa_fastid;
+    if (!chatId) return;
+
+    setSendingMsg(true);
+    setReplyText('');
+    // Adiciona mensagem otimisticamente ao array local
+    const optimistic = {
+      messageid: `local-${Date.now()}`,
+      fromMe: true,
+      messageTimestamp: Math.floor(Date.now() / 1000),
+      message: { conversation: text },
+    };
+    setMessages(prev => [...prev, optimistic]);
+
+    try {
+      await whatsappApi.sendMessage(selectedInstId, chatId, text);
+    } catch (e) {
+      console.warn('[Inbox] sendMessage falhou:', e.message);
+      // Remove a mensagem otimista em caso de falha
+      setMessages(prev => prev.filter(m => m.messageid !== optimistic.messageid));
+      setReplyText(text);
+    } finally {
+      setSendingMsg(false);
+    }
+  }
 
   // -- Instância selecionada --
   const selectedInst = instances.find(i => i.id === selectedInstId);
@@ -699,26 +757,32 @@ export default function Inbox() {
                 <div ref={bottomRef} />
               </div>
 
-              {/* Barra de reply — placeholder (envio não implementado neste sprint) */}
+              {/* Barra de reply */}
               <div className="inbox-reply-bar">
                 <input
                   className="inbox-reply-input"
                   type="text"
-                  placeholder="Resposta — em breve…"
-                  disabled
-                  readOnly
+                  placeholder="Digite uma mensagem…"
+                  value={replyText}
+                  onChange={e => setReplyText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                  disabled={sendingMsg}
                 />
-                <div style={{
-                  width: 34, height: 34, borderRadius: '50%',
-                  background: 'rgba(255,106,61,.2)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  opacity: .4, cursor: 'not-allowed',
-                }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--brand-500)" strokeWidth="2.5">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                </div>
+                <button
+                  className="inbox-reply-send-btn"
+                  onClick={handleSend}
+                  disabled={sendingMsg || !replyText.trim()}
+                  title="Enviar mensagem"
+                >
+                  {sendingMsg ? (
+                    <span className="inbox-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                      <line x1="22" y1="2" x2="11" y2="13" />
+                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                  )}
+                </button>
               </div>
             </>
           )}

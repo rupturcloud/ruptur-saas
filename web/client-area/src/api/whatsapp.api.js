@@ -133,6 +133,16 @@ export const whatsappApi = {
   getMessages(id, chatId, limit = 50) {
     return http.get('/whatsapp/numbers/:id/messages', { params: { id }, query: { chatId, limit } });
   },
+
+  /**
+   * Envia mensagem de texto para um chat via UAZAPI POST /send/text.
+   * @param {string} id — UUID do número no banco
+   * @param {string} chatId — ID do chat no WhatsApp (ex: 5511999999999@s.whatsapp.net)
+   * @param {string} text — texto da mensagem
+   */
+  sendMessage(id, chatId, text) {
+    return http.post('/whatsapp/numbers/:id/messages', { params: { id }, body: { chatId, text } });
+  },
 };
 
 export default whatsappApi;
