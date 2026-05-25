@@ -52,7 +52,29 @@ export class WhatsappService {
     }
 
     // phone → pairing code; sem phone → QR code
-    const session = await this.adapter.startSession(remoteId, { phone });
+    // Auto-recuperação: se token expirou no provider (free server 1h TTL),
+    // cria nova instância e tenta de novo (transparent para o usuário).
+    let session;
+    try {
+      session = await this.adapter.startSession(remoteId, { phone });
+    } catch (err) {
+      const msg = (err?.message || '').toLowerCase();
+      const isInvalidToken = msg.includes('invalid token') || msg.includes('not found') ||
+                             msg.includes('404') || msg.includes('401');
+      if (!isInvalidToken) throw err;
+      // Token inválido → instância expirou no provider → recriar
+      console.warn(`[whatsapp.service] connect: token inválido (${remoteId?.slice(0, 16)}…) — recriando instância.`);
+      const created = await this.adapter.createInstance({ name: row.instance_name });
+      remoteId = created.providerId;
+      await this.repo.updateStatus({
+        id,
+        status: 'connecting',
+        remoteInstanceId: remoteId,
+        metadata: { ...(row.metadata || {}), provider: { internalId: created.internalId } },
+      });
+      session = await this.adapter.startSession(remoteId, { phone });
+    }
+
     await this.repo.updateStatus({ id, status: session.status?.toLowerCase() || 'connecting' });
     return {
       id,
@@ -329,6 +351,11 @@ export class WhatsappService {
       return { id, chats };
     } catch (e) {
       console.warn('[whatsapp.service] getChats falhou:', e.message);
+      // Expõe token inválido como status desconectado para o frontend saber exibir UI correta
+      const msg = (e?.message || '').toLowerCase();
+      if (msg.includes('invalid token') || msg.includes('not found') || msg.includes('401')) {
+        return { id, chats: [], error: 'INSTANCE_EXPIRED' };
+      }
       return { id, chats: [] };
     }
   }

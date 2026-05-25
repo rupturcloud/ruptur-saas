@@ -426,6 +426,7 @@ export default function Inbox() {
   // Conversas
   const [chats, setChats]                 = useState([]);
   const [chatsLoading, setChatsLoading]   = useState(false);
+  const [instanceExpired, setInstanceExpired] = useState(false);
 
   // Chat selecionado + mensagens
   const [selectedChat, setSelectedChat]   = useState(null);
@@ -457,9 +458,15 @@ export default function Inbox() {
   const loadChats = useCallback(async (instId) => {
     if (!instId) return;
     setChatsLoading(true);
+    setInstanceExpired(false);
     try {
       const res = await whatsappApi.getChats(instId, 40);
-      setChats(res?.data?.chats || []);
+      if (res?.data?.error === 'INSTANCE_EXPIRED') {
+        setInstanceExpired(true);
+        setChats([]);
+      } else {
+        setChats(res?.data?.chats || []);
+      }
     } catch (e) {
       console.warn('[Inbox] getChats falhou:', e.message);
       setChats([]);
@@ -585,13 +592,29 @@ export default function Inbox() {
 
           {/* Lista de chats */}
           <div className="inbox-chat-list">
+            {/* Banner: instância expirada (free server 1h TTL) */}
+            {instanceExpired && !chatsLoading && (
+              <div style={{
+                margin: '12px 12px 0',
+                padding: '10px 12px',
+                background: 'rgba(255,106,61,0.1)',
+                border: '1px solid rgba(255,106,61,0.3)',
+                borderRadius: 8,
+                fontSize: 12,
+                color: '#FF6A3D',
+                lineHeight: 1.4,
+              }}>
+                ⚠️ <b>Sessão expirada.</b> Vá em <b>Números</b> e reconecte o QR para continuar.
+              </div>
+            )}
+
             {chatsLoading && (
               <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}>
                 <Spinner />
               </div>
             )}
 
-            {!chatsLoading && filteredChats.length === 0 && (
+            {!chatsLoading && !instanceExpired && filteredChats.length === 0 && (
               <div className="inbox-sidebar-empty">
                 <div style={{ fontSize: 28 }}>💬</div>
                 <div>
