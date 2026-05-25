@@ -12,7 +12,7 @@
  */
 
 // Versão do SW (increment para force update e limpar cache antigo)
-const SW_VERSION = "2.1.0-ruptur-os";
+const SW_VERSION = "2.2.0-ruptur-os";
 const CACHE_NAME = `ruptur-os-${SW_VERSION}`;
 
 console.log(`✓ Service Worker v${SW_VERSION} loaded`);
@@ -197,7 +197,9 @@ self.addEventListener("fetch", (event) => {
         }
         return fetch(event.request).then((res) => {
           if (res.ok) {
-            caches.open(CACHE_NAME).then((c) => c.put(event.request, res.clone()));
+            // clone() ANTES do return res — body não pode ser clonado depois de consumido
+            const resClone = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(event.request, resClone));
           }
           return res;
         });
@@ -213,7 +215,9 @@ self.addEventListener("fetch", (event) => {
       .then((res) => {
         // Cache manifest.json e logo (estáticos, mudam raramente)
         if (res.ok && (url.pathname === "/manifest.json" || url.pathname.endsWith(".png"))) {
-          caches.open(CACHE_NAME).then((c) => c.put(event.request, res.clone()));
+          // clone() ANTES do return res
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(event.request, resClone));
         }
         return res;
       })
