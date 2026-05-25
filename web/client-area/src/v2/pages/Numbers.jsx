@@ -483,7 +483,7 @@ function InstanceCard({ inst, health, onConnect, onReconnect, onConfig, onDiscon
         <div className="inst-hitl-banner lost">
           <span style={{ fontSize: 13 }}>⏱</span>
           <span className="hitl-msg">Sessão expirada — reconecte para continuar</span>
-          <button onClick={() => onConnect(inst)}>Reconectar QR</button>
+          <button onClick={onConnect}>Reconectar QR</button>
         </div>
       )}
 
@@ -1210,21 +1210,24 @@ export default function Numbers() {
     return () => clearInterval(tid);
   }, [instances, loadHealth]);
 
-  // Polling de status a cada 30s — detecta expiração de instância free server (TTL 1h)
-  // Quando o backend retorna freeTrialExpired: true, marca a instância no state e para o poll para ela.
-  useEffect(() => {
-    if (instances.length === 0) return;
-    // Só faz poll para instâncias que ainda não foram marcadas como expiradas
-    const targets = instances.filter(i => !i.freeTrialExpired && i._state !== 'connecting');
-    if (targets.length === 0) return;
+  // Polling de status a cada 30s — detecta expiração de instância free server (TTL 1h).
+  // Usa ref para acessar o state atual sem criar dependência que causaria loop de re-render.
+  const instancesRef = useRef(instances);
+  useEffect(() => { instancesRef.current = instances; }, [instances]);
 
+  useEffect(() => {
     const tid = setInterval(async () => {
+      const current = instancesRef.current;
+      // Só faz poll para instâncias que ainda não foram marcadas como expiradas
+      const targets = current.filter(i => !i.freeTrialExpired && i._state !== 'connecting');
+      if (targets.length === 0) return;
+
       await Promise.allSettled(targets.map(async (inst) => {
         try {
           const res = await whatsappApi.status(inst.id);
           const data = res?.data || res || {};
           if (data.freeTrialExpired) {
-            // Atualiza o state local — para o poll implicitamente na próxima iteração (targets filtrado)
+            // Marca a instância como expirada no state local
             setInstances(prev => prev.map(x =>
               x.id === inst.id
                 ? { ...x, freeTrialExpired: true, _state: 'disconnected', status: 'disconnected' }
@@ -1235,7 +1238,8 @@ export default function Numbers() {
       }));
     }, 30_000);
     return () => clearInterval(tid);
-  }, [instances]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // sem dependências — acessa instances via ref
 
   // Callback SSE: quando o sensor receber um evento de estado, injeta no polling local.
   // Por ora apenas loga — quando o proxy SSE estiver implementado, irá atualizar o state.

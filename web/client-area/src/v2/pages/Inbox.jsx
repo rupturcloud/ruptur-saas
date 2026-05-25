@@ -489,11 +489,13 @@ export default function Inbox() {
     setInstanceExpired(false);
     try {
       const res = await whatsappApi.getChats(instId, 40);
-      if (res?.data?.error === 'INSTANCE_EXPIRED') {
+      const data = res?.data || {};
+      // Detecta expiração: freeTrialExpired (campo novo) ou error legado INSTANCE_EXPIRED
+      if (data.freeTrialExpired || data.error === 'INSTANCE_EXPIRED') {
         setInstanceExpired(true);
         setChats([]);
       } else {
-        setChats(res?.data?.chats || []);
+        setChats(data.chats || []);
       }
     } catch (e) {
       console.warn('[Inbox] getChats falhou:', e.message);
