@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Icon } from '../../ds/index.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { useIdleTimer } from '../../hooks/useIdleTimer.js';
+import IdleWarningModal from '../../components/IdleWarningModal.jsx';
 
 const NAV = [
   { section: 'Operação', items: [
@@ -31,7 +33,7 @@ const NAV = [
   ]},
 ];
 
-function Sidebar({ collapsed, onToggle }) {
+function Sidebar({ collapsed, onToggle, onSignOut }) {
   const navigate = useNavigate();
   const { session, tenant } = useAuth();
 
@@ -202,44 +204,68 @@ function Sidebar({ collapsed, onToggle }) {
         }}
       >
         {collapsed ? (
-          /* Collapsed: só avatar centralizado */
-          <div
-            style={{
-              padding: '12px 0',
-              display: 'flex',
-              justifyContent: 'center',
-            }}
-          >
+          /* Collapsed: avatar + ícone logout empilhados */
+          <div style={{ padding: '12px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
             <div
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
+                width: 32, height: 32, borderRadius: '50%',
                 background: '#FF6A3D',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 12,
-                fontWeight: 700,
-                color: '#fff',
-                cursor: 'pointer',
-                flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 700, color: '#fff',
+                cursor: 'pointer', flexShrink: 0,
               }}
               title={userName}
               onClick={() => navigate('/v0/admin')}
             >
               {userInitials}
             </div>
+            <button
+              onClick={onSignOut}
+              title="Sair da conta"
+              style={{
+                width: 32, height: 32, borderRadius: 8,
+                border: '1px solid rgba(255,106,61,0.3)',
+                background: 'rgba(255,106,61,0.06)',
+                color: '#FF8C69', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
           </div>
         ) : (
-          /* Expanded: avatar + nome + plano + ícone de configurações */
-          <div style={{ padding: '10px 8px' }}>
+          /* Expanded: avatar + nome + plano + botão sair */
+          <div style={{ padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <UserProfileRow
               userInitials={userInitials}
               userName={userName}
               planLabel={planLabel}
               onClick={() => navigate('/v0/admin')}
             />
+            <button
+              onClick={onSignOut}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', padding: '8px 10px', borderRadius: 8,
+                border: '1px solid rgba(255,106,61,0.25)',
+                background: 'rgba(255,106,61,0.06)',
+                color: '#FF8C69', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,106,61,0.14)'; e.currentTarget.style.borderColor = 'rgba(255,106,61,0.5)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,106,61,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,106,61,0.25)'; }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              Sair da conta
+            </button>
           </div>
         )}
       </div>
@@ -377,8 +403,28 @@ function Topbar() {
 }
 
 export default function AppShell() {
+  const { signOut, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(() => {
     return localStorage.getItem('sidebar-collapsed') === 'true';
+  });
+  const [idleWarning, setIdleWarning] = useState(null);
+
+  // signOut + redirect explícito (rota /v0 não tem ProtectedRoute)
+  const handleSignOut = useCallback(async () => {
+    await signOut();
+    navigate('/login', { replace: true });
+  }, [signOut, navigate]);
+
+  const handleIdle    = useCallback(() => { setIdleWarning(null); handleSignOut(); }, [handleSignOut]);
+  const handleWarning = useCallback((s) => setIdleWarning(s), []);
+  const handleStay    = useCallback(() => setIdleWarning(null), []);
+
+  useIdleTimer({
+    enabled: isAuthenticated,
+    onIdle: handleIdle,
+    onWarning: handleWarning,
+    onActive: () => setIdleWarning(null),
   });
 
   function toggleSidebar() {
@@ -388,31 +434,40 @@ export default function AppShell() {
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        height: '100vh',
-        overflow: 'hidden',
-      }}
-    >
-      <Sidebar collapsed={collapsed} onToggle={toggleSidebar} />
+    <>
+      {idleWarning !== null && (
+        <IdleWarningModal
+          secondsLeft={idleWarning}
+          onStay={handleStay}
+          onLeave={handleSignOut}
+        />
+      )}
       <div
         style={{
-          flex: 1,
           display: 'flex',
-          flexDirection: 'column',
+          height: '100vh',
           overflow: 'hidden',
-          minWidth: 0,
         }}
       >
-        <Topbar />
+        <Sidebar collapsed={collapsed} onToggle={toggleSidebar} onSignOut={handleSignOut} />
         <div
-          className="page"
-          style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            minWidth: 0,
+          }}
         >
-          <Outlet />
+          <Topbar />
+          <div
+            className="page"
+            style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}
+          >
+            <Outlet />
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
