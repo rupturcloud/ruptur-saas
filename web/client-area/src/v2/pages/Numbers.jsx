@@ -598,12 +598,33 @@ const WEBHOOK_EVENTS = [
   { id: 'connection-update', label: 'connection-update', desc: 'Estado da sessão' },
 ];
 
+// Seção interna do drawer com título colapsável
+function DrawerSection({ title, emoji, children, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ border: '1px solid var(--ink-200)', borderRadius: 10, overflow: 'hidden' }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px', background: 'var(--ink-50)', border: 'none', cursor: 'pointer',
+        borderBottom: open ? '1px solid var(--ink-200)' : 'none',
+      }}>
+        <span style={{ fontWeight: 700, fontSize: 12.5 }}>{emoji} {title}</span>
+        <span style={{ fontSize: 11, color: 'var(--ink-400)' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>}
+    </div>
+  );
+}
+
 function InstanceConfigDrawer({ inst, onClose, onSave }) {
-  // Lê webhookConfig do DTO (populado pelo backend a partir de metadata.webhook)
   const wh = inst.webhookConfig || inst.metadata?.webhook || {};
   const { toast } = useToast?.() ?? { toast: () => {} };
+  const isConnected = inst.status === 'connected';
+
   const [draft, setDraft] = useState({
     name:               inst.name               || '',
+    profileName:        '',
+    profileImageUrl:    '',
     webhookUrl:         inst.webhookUrl         || wh.url               || '',
     webhookEnabled:     wh.enabled              ?? true,
     webhookEvents:      wh.events               ?? ['messages_update'],
@@ -612,9 +633,20 @@ function InstanceConfigDrawer({ inst, onClose, onSave }) {
     delay:              inst.delay              ?? 3,
     dailyLimit:         inst.dailyLimit         ?? 500,
   });
-  const [saving, setSaving]   = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError]     = useState(null);
+
+  const [saving, setSaving]     = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [deleting, setDeleting]  = useState(false);
+  const [error, setError]        = useState(null);
+  const [limits, setLimits]      = useState(null);
+
+  // Carrega limites de mensagens se instância conectada
+  useEffect(() => {
+    if (!isConnected) return;
+    whatsappApi.getMessagesLimits(inst.id)
+      .then(r => setLimits(r?.data?.limits || r?.limits || null))
+      .catch(() => {});
+  }, [inst.id, isConnected]);
 
   function toggleEvent(ev) {
     setDraft(d => ({
@@ -629,12 +661,17 @@ function InstanceConfigDrawer({ inst, onClose, onSave }) {
     setSaving(true);
     setError(null);
     try {
-      const res = await whatsappApi.updateNumber(inst.id, {
-        name:       draft.name,
+      // 1) Atualiza nome da instância (Supabase + UAZAPI)
+      if (draft.name !== inst.name) {
+        await whatsappApi.updateInstanceName(inst.id, draft.name);
+      }
+      // 2) Atualiza delay/dailyLimit no banco
+      await whatsappApi.updateNumber(inst.id, {
         webhookUrl: draft.webhookUrl,
         delay:      draft.delay,
         dailyLimit: draft.dailyLimit,
       });
+      // 3) Webhook
       await whatsappApi.setWebhook(inst.id, {
         url:                draft.webhookUrl,
         enabled:            draft.webhookEnabled,
@@ -642,11 +679,36 @@ function InstanceConfigDrawer({ inst, onClose, onSave }) {
         addUrlEvents:       draft.addUrlEvents,
         addUrlTypeMessages: draft.addUrlTypeMessages,
       });
+      // 4) Perfil WA — só se conectado e campos preenchidos
+      if (isConnected && draft.profileName.trim()) {
+        await whatsappApi.updateProfileName(inst.id, draft.profileName.trim()).catch(e => {
+          toast?.(`⚠️ Nome do perfil: ${e?.message}`);
+        });
+      }
+      if (isConnected && draft.profileImageUrl.trim()) {
+        await whatsappApi.updateProfileImage(inst.id, draft.profileImageUrl.trim()).catch(e => {
+          toast?.(`⚠️ Foto do perfil: ${e?.message}`);
+        });
+      }
       toast?.('✅ Configurações salvas.');
-      onSave(res?.data || draft);
+      onSave({ ...inst, name: draft.name, webhookUrl: draft.webhookUrl, delay: draft.delay, dailyLimit: draft.dailyLimit });
     } catch (e) {
       setError(e?.message || 'Erro ao salvar.');
+    } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleReset() {
+    if (!window.confirm('Reiniciar runtime da instância? A sessão pode precisar reconectar.')) return;
+    setResetting(true);
+    try {
+      await whatsappApi.resetInstance(inst.id);
+      toast?.('🔄 Instância reiniciada.');
+    } catch (e) {
+      setError(e?.message || 'Erro ao reiniciar.');
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -663,6 +725,11 @@ function InstanceConfigDrawer({ inst, onClose, onSave }) {
     }
   }
 
+  const limitBadge = limits == null ? null
+    : limits.can_send_new_messages === true  ? { color: '#16a34a', bg: '#f0fdf4', label: '✅ Pode enviar novas conversas' }
+    : limits.can_send_new_messages === false ? { color: '#dc2626', bg: '#fef2f2', label: `⛔ ${limits.message_ptbr || 'Limitado pelo WhatsApp'}` }
+    : null;
+
   return (
     <Drawer title={`Config · ${inst.name}`} onClose={onClose} footer={
       <>
@@ -672,96 +739,122 @@ function InstanceConfigDrawer({ inst, onClose, onSave }) {
         </Button>
       </>
     }>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-        {/* — Dados da instância — */}
-        <Input label="Nome da instância" value={draft.name}
-          onChange={e => setDraft({ ...draft, name: e.target.value })} />
+        {/* — Instância — */}
+        <DrawerSection title="Instância" emoji="📱">
+          <Input label="Nome da instância (interno)" value={draft.name}
+            onChange={e => setDraft({ ...draft, name: e.target.value })} />
+          <div style={{ fontSize: 11.5, color: 'var(--ink-500)' }}>
+            Número: <b>{inst.phone || 'aguardando conexão'}</b>
+            {inst.status === 'connected' && <span style={{ marginLeft: 8, color: '#16a34a' }}>● conectado</span>}
+          </div>
+          {/* Limites de novas mensagens */}
+          {limitBadge && (
+            <div style={{ padding: '8px 12px', background: limitBadge.bg, borderRadius: 8, fontSize: 12, color: limitBadge.color, fontWeight: 600 }}>
+              {limitBadge.label}
+            </div>
+          )}
+        </DrawerSection>
 
-        {/* — Webhook — seguindo padrão UazapiGO — */}
-        <div style={{ border: '1px solid var(--ink-200)', borderRadius: 10, overflow: 'hidden' }}>
-          {/* Header com toggle habilitado */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--ink-50)', borderBottom: '1px solid var(--ink-200)' }}>
-            <span style={{ fontWeight: 700, fontSize: 12.5 }}>🔗 Webhook</span>
+        {/* — Perfil WhatsApp — só se conectado — */}
+        {isConnected && (
+          <DrawerSection title="Perfil WhatsApp" emoji="👤" defaultOpen={false}>
+            <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: -4 }}>
+              Alterações visíveis para todos os seus contatos no WhatsApp.
+            </div>
+            <Input label="Nome de exibição (máx 25 chars)" value={draft.profileName}
+              placeholder="ex: Suporte Ruptur"
+              onChange={e => setDraft({ ...draft, profileName: e.target.value.slice(0, 25) })} />
+            <Input label="Foto de perfil (URL https ou base64)" value={draft.profileImageUrl}
+              placeholder='https://... · ou "remove" para remover'
+              onChange={e => setDraft({ ...draft, profileImageUrl: e.target.value })} />
+            <div style={{ fontSize: 11, color: 'var(--ink-400)' }}>
+              Deixe em branco para não alterar. Imagem: JPEG 640×640px recomendado.
+            </div>
+          </DrawerSection>
+        )}
+
+        {/* — Webhook — */}
+        <DrawerSection title="Webhook" emoji="🔗" defaultOpen={false}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600 }}>Habilitado</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 }}>
               <input type="checkbox" checked={draft.webhookEnabled}
                 onChange={e => setDraft({ ...draft, webhookEnabled: e.target.checked })} />
-              Habilitado
             </label>
           </div>
-
-          <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Input label="URL do webhook" value={draft.webhookUrl}
-              onChange={e => setDraft({ ...draft, webhookUrl: e.target.value })}
-              placeholder="https://sua-api.com/webhook" />
-
-            {/* Opções de URL */}
-            <div style={{ display: 'flex', gap: 16 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer' }}>
-                <input type="checkbox" checked={draft.addUrlEvents}
-                  onChange={e => setDraft({ ...draft, addUrlEvents: e.target.checked })} />
-                addUrlEvents
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer' }}>
-                <input type="checkbox" checked={draft.addUrlTypeMessages}
-                  onChange={e => setDraft({ ...draft, addUrlTypeMessages: e.target.checked })} />
-                addUrlTypeMessages
-              </label>
+          <Input label="URL do webhook" value={draft.webhookUrl}
+            onChange={e => setDraft({ ...draft, webhookUrl: e.target.value })}
+            placeholder="https://sua-api.com/webhook" />
+          <div style={{ display: 'flex', gap: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer' }}>
+              <input type="checkbox" checked={draft.addUrlEvents}
+                onChange={e => setDraft({ ...draft, addUrlEvents: e.target.checked })} />
+              addUrlEvents
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer' }}>
+              <input type="checkbox" checked={draft.addUrlTypeMessages}
+                onChange={e => setDraft({ ...draft, addUrlTypeMessages: e.target.checked })} />
+              addUrlTypeMessages
+            </label>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-500)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+              Escutar eventos
             </div>
-
-            {/* Eventos para escutar */}
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-500)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>
-                Escutar eventos
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {WEBHOOK_EVENTS.map(ev => (
-                  <label key={ev.id} title={ev.desc}
-                    style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer',
-                      padding: '4px 10px', borderRadius: 999,
-                      background: draft.webhookEvents.includes(ev.id) ? 'var(--brand-50,#FFF4F1)' : 'var(--ink-100)',
-                      border: `1px solid ${draft.webhookEvents.includes(ev.id) ? 'var(--brand-200,#FFD5C5)' : 'transparent'}`,
-                      fontSize: 11.5, fontWeight: 600 }}>
-                    <input type="checkbox" style={{ display: 'none' }}
-                      checked={draft.webhookEvents.includes(ev.id)}
-                      onChange={() => toggleEvent(ev.id)} />
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: draft.webhookEvents.includes(ev.id) ? 'var(--brand-500)' : 'var(--ink-400)', flexShrink: 0 }} />
-                    {ev.label}
-                  </label>
-                ))}
-              </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {WEBHOOK_EVENTS.map(ev => (
+                <label key={ev.id} title={ev.desc}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer',
+                    padding: '4px 10px', borderRadius: 999,
+                    background: draft.webhookEvents.includes(ev.id) ? 'var(--brand-50,#FFF4F1)' : 'var(--ink-100)',
+                    border: `1px solid ${draft.webhookEvents.includes(ev.id) ? 'var(--brand-200,#FFD5C5)' : 'transparent'}`,
+                    fontSize: 11.5, fontWeight: 600 }}>
+                  <input type="checkbox" style={{ display: 'none' }}
+                    checked={draft.webhookEvents.includes(ev.id)}
+                    onChange={() => toggleEvent(ev.id)} />
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: draft.webhookEvents.includes(ev.id) ? 'var(--brand-500)' : 'var(--ink-400)', flexShrink: 0 }} />
+                  {ev.label}
+                </label>
+              ))}
             </div>
           </div>
-        </div>
+        </DrawerSection>
 
         {/* — Limites de envio — */}
-        <div>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--ink-600)', marginBottom: 6 }}>
-            Delay entre mensagens · {draft.delay}s
-          </label>
-          <input type="range" min="1" max="10" value={draft.delay}
-            onChange={e => setDraft({ ...draft, delay: +e.target.value })}
-            style={{ width: '100%' }} />
-        </div>
-        <Input label="Limite diário (mensagens)" type="number" value={draft.dailyLimit}
-          onChange={e => setDraft({ ...draft, dailyLimit: +e.target.value })} />
+        <DrawerSection title="Envio" emoji="⚡" defaultOpen={false}>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--ink-600)', marginBottom: 6 }}>
+              Delay entre mensagens · {draft.delay}s
+            </label>
+            <input type="range" min="1" max="10" value={draft.delay}
+              onChange={e => setDraft({ ...draft, delay: +e.target.value })}
+              style={{ width: '100%' }} />
+          </div>
+          <Input label="Limite diário (mensagens)" type="number" value={draft.dailyLimit}
+            onChange={e => setDraft({ ...draft, dailyLimit: +e.target.value })} />
+          <div style={{ padding: 10, background: 'var(--brand-50,#FFF4F1)', border: '1px solid var(--brand-100,#FFD9CC)', borderRadius: 8, fontSize: 11.5, color: 'var(--ink-700)' }}>
+            <b style={{ color: 'var(--brand-500)' }}>⚠️ Anti-ban:</b> intervalo mínimo 2s · kill switch automático se taxa de bloqueio &gt; 8%.
+          </div>
+        </DrawerSection>
 
         {error && (
-          <div style={{ fontSize: 12.5, color: 'var(--danger,#DC2626)', padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8 }}>
+          <div style={{ fontSize: 12.5, color: '#dc2626', padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8 }}>
             {error}
           </div>
         )}
 
-        <div style={{ padding: 12, background: 'var(--brand-50,#FFF4F1)', border: '1px solid var(--brand-100,#FFD9CC)', borderRadius: 8, fontSize: 12.5, color: 'var(--ink-700)' }}>
-          <b style={{ color: 'var(--brand-500)' }}>⚠️ Proteção anti-ban:</b> intervalo mínimo 2s, kill switch automático se taxa de bloqueio &gt; 8%.
-        </div>
-
-        <div style={{ borderTop: '1px solid var(--ink-150,#ECEEF1)', paddingTop: 14 }}>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            style={{ width: '100%', padding: '10px 14px', background: '#FEF2F2', color: 'var(--danger,#DC2626)', border: '1px solid #FECACA', borderRadius: 8, cursor: deleting ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13, opacity: deleting ? 0.6 : 1 }}
-          >
+        {/* — Ações perigosas — */}
+        <div style={{ borderTop: '1px solid var(--ink-150,#ECEEF1)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {isConnected && (
+            <button onClick={handleReset} disabled={resetting}
+              style={{ width: '100%', padding: '9px 14px', background: '#FFFBEB', color: '#92400E', border: '1px solid #FDE68A', borderRadius: 8, cursor: resetting ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13, opacity: resetting ? 0.6 : 1 }}>
+              {resetting ? 'Reiniciando…' : '🔄 Reiniciar runtime da instância'}
+            </button>
+          )}
+          <button onClick={handleDelete} disabled={deleting}
+            style={{ width: '100%', padding: '9px 14px', background: '#FEF2F2', color: '#dc2626', border: '1px solid #FECACA', borderRadius: 8, cursor: deleting ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13, opacity: deleting ? 0.6 : 1 }}>
             {deleting ? 'Excluindo…' : '🗑 Excluir instância'}
           </button>
         </div>

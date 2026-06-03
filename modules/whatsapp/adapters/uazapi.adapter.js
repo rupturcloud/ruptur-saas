@@ -386,6 +386,134 @@ export class UazapiWhatsappAdapter {
     );
   }
 
+  // ─── Instância: reset, nome, delay, limites ──────────────────────────────────
+
+  /**
+   * Reinicia o runtime da instância sem apagar o registro.
+   * Útil quando sessão ficou presa ou envio parou de progredir.
+   * POST /instance/reset
+   */
+  async resetInstance(instanceToken) {
+    return this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/instance/reset', { method: 'POST', body: {} }),
+      'resetInstance'
+    );
+  }
+
+  /**
+   * Atualiza o nome da instância no provider UAZAPI.
+   * POST /instance/updateInstanceName
+   * @param {string} instanceToken
+   * @param {string} name — novo nome
+   */
+  async updateInstanceName(instanceToken, name) {
+    return this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/instance/updateInstanceName', {
+        method: 'POST',
+        body: { name },
+      }),
+      'updateInstanceName'
+    );
+  }
+
+  /**
+   * Configura delay de envio de mensagens diretas (min/max em segundos).
+   * POST /instance/updateDelaySettings
+   */
+  async updateDelaySettings(instanceToken, { min = 0, max = 2 } = {}) {
+    return this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/instance/updateDelaySettings', {
+        method: 'POST',
+        body: { msg_delay_min: min, msg_delay_max: max },
+      }),
+      'updateDelaySettings'
+    );
+  }
+
+  /**
+   * Consulta limites de novas conversas no WhatsApp.
+   * GET /instance/wa_messages_limits
+   */
+  async getMessagesLimits(instanceToken) {
+    return this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/instance/wa_messages_limits', { method: 'GET' }),
+      'getMessagesLimits'
+    );
+  }
+
+  // ─── Perfil WhatsApp ──────────────────────────────────────────────────────────
+
+  /**
+   * Altera o nome de exibição do perfil WhatsApp (máx 25 chars).
+   * POST /profile/name
+   */
+  async updateProfileName(instanceToken, name) {
+    return this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/profile/name', {
+        method: 'POST',
+        body: { name },
+      }),
+      'updateProfileName'
+    );
+  }
+
+  /**
+   * Altera a foto de perfil WhatsApp.
+   * POST /profile/image
+   * @param {string} instanceToken
+   * @param {string} image — URL https, base64 ou "remove"
+   */
+  async updateProfileImage(instanceToken, image) {
+    return this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/profile/image', {
+        method: 'POST',
+        body: { image },
+      }),
+      'updateProfileImage'
+    );
+  }
+
+  // ─── Privacidade ──────────────────────────────────────────────────────────────
+
+  /**
+   * Busca configurações de privacidade da conta conectada.
+   * GET /instance/privacy
+   */
+  async getPrivacy(instanceToken) {
+    return this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/instance/privacy', { method: 'GET' }),
+      'getPrivacy'
+    );
+  }
+
+  /**
+   * Atualiza configurações de privacidade.
+   * POST /instance/privacy
+   * @param {object} settings — ex: { lastSeen: 'contacts', profilePhoto: 'all', ... }
+   */
+  async setPrivacy(instanceToken, settings) {
+    return this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/instance/privacy', {
+        method: 'POST',
+        body: settings,
+      }),
+      'setPrivacy'
+    );
+  }
+
+  // ─── Grupos ───────────────────────────────────────────────────────────────────
+
+  /**
+   * Lista todos os grupos da instância.
+   * GET /group/list
+   */
+  async listGroups(instanceToken) {
+    return this._withTimeout(
+      () => this._client.instanceRequest(instanceToken, '/group/list', { method: 'GET' }),
+      'listGroups'
+    );
+  }
+
   /**
    * Proxy SSE: faz pipe do endpoint GET /sse da UAZAPI para a resposta do cliente.
    * Necessário porque o browser não pode chamar free.uazapi.com diretamente (CORS).

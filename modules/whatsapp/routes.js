@@ -97,18 +97,53 @@ export async function registerWhatsappRoutes({ req, res, pathname, method, ctx }
     if (method === 'POST') { await controller.setWebhook(req, res);  return true; }
   }
 
-  const m = pathname.match(/^\/api\/v1\/whatsapp\/numbers\/([^/]+)\/(connect|reconnect|status|health|warmup)$/);
+  const m = pathname.match(/^\/api\/v1\/whatsapp\/numbers\/([^/]+)\/(connect|reconnect|status|health|warmup|reset|groups|limits)$/);
   if (m) {
     req.params = { id: m[1] };
     const action = m[2];
-    if (action === 'connect'   && method === 'POST')   { await controller.connect(req, res);           return true; }
-    if (action === 'reconnect' && method === 'POST')   { await controller.reconnect(req, res);          return true; }
-    if (action === 'status'    && method === 'GET')    { await controller.getStatus(req, res);          return true; }
-    if (action === 'health'    && method === 'GET')    { await controller.getHealth(req, res);          return true; }
-    if (action === 'warmup'    && method === 'GET')    { await controller.getWarmupStatus(req, res);    return true; }
-    if (action === 'warmup'    && method === 'POST')   { await controller.startWarmup(req, res);        return true; }
-    if (action === 'warmup'    && method === 'DELETE') { await controller.stopWarmup(req, res);         return true; }
-    if (action === 'warmup'    && method === 'PATCH')  { await controller.updateWarmupConfig(req, res); return true; }
+    if (action === 'connect'    && method === 'POST')   { await controller.connect(req, res);                    return true; }
+    if (action === 'reconnect'  && method === 'POST')   { await controller.reconnect(req, res);                  return true; }
+    if (action === 'status'     && method === 'GET')    { await controller.getStatus(req, res);                  return true; }
+    if (action === 'health'     && method === 'GET')    { await controller.getHealth(req, res);                  return true; }
+    if (action === 'warmup'     && method === 'GET')    { await controller.getWarmupStatus(req, res);            return true; }
+    if (action === 'warmup'     && method === 'POST')   { await controller.startWarmup(req, res);                return true; }
+    if (action === 'warmup'     && method === 'DELETE') { await controller.stopWarmup(req, res);                 return true; }
+    if (action === 'warmup'     && method === 'PATCH')  { await controller.updateWarmupConfig(req, res);        return true; }
+    if (action === 'reset'      && method === 'POST')   { await controller.resetInstance(req, res);              return true; }
+    if (action === 'groups'     && method === 'GET')    { await controller.listGroups(req, res);                 return true; }
+    if (action === 'limits'     && method === 'GET')    { await controller.getMessagesLimits(req, res);          return true; }
+  }
+
+  // POST /api/v1/whatsapp/numbers/:id/profile/name
+  const mProfileName = pathname.match(/^\/api\/v1\/whatsapp\/numbers\/([^/]+)\/profile\/name$/);
+  if (mProfileName && method === 'POST') {
+    req.params = { id: mProfileName[1] };
+    await controller.updateProfileName(req, res);
+    return true;
+  }
+
+  // POST /api/v1/whatsapp/numbers/:id/profile/image
+  const mProfileImage = pathname.match(/^\/api\/v1\/whatsapp\/numbers\/([^/]+)\/profile\/image$/);
+  if (mProfileImage && method === 'POST') {
+    req.params = { id: mProfileImage[1] };
+    await controller.updateProfileImage(req, res);
+    return true;
+  }
+
+  // GET|POST /api/v1/whatsapp/numbers/:id/privacy
+  const mPrivacy = pathname.match(/^\/api\/v1\/whatsapp\/numbers\/([^/]+)\/privacy$/);
+  if (mPrivacy) {
+    req.params = { id: mPrivacy[1] };
+    if (method === 'GET')  { await controller.getPrivacy(req, res);  return true; }
+    if (method === 'POST') { await controller.setPrivacy(req, res);  return true; }
+  }
+
+  // POST /api/v1/whatsapp/numbers/:id/instance-name
+  const mInstName = pathname.match(/^\/api\/v1\/whatsapp\/numbers\/([^/]+)\/instance-name$/);
+  if (mInstName && method === 'POST') {
+    req.params = { id: mInstName[1] };
+    await controller.updateInstanceNameOnProvider(req, res);
+    return true;
   }
 
   return false;

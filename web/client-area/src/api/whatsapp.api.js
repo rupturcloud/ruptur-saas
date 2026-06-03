@@ -98,6 +98,46 @@ export const whatsappApi = {
     return http.post('/whatsapp/numbers/:id/disconnect', { params: { id } });
   },
 
+  /** Reinicia runtime da instância sem apagar o registro. */
+  resetInstance(id) {
+    return http.post('/whatsapp/numbers/:id/reset', { params: { id } });
+  },
+
+  /** Atualiza nome do perfil WhatsApp (máx 25 chars). */
+  updateProfileName(id, name) {
+    return http.post('/whatsapp/numbers/:id/profile/name', { params: { id }, body: { name } });
+  },
+
+  /** Atualiza foto de perfil WhatsApp (URL https, base64 ou "remove"). */
+  updateProfileImage(id, image) {
+    return http.post('/whatsapp/numbers/:id/profile/image', { params: { id }, body: { image } });
+  },
+
+  /** Busca configurações de privacidade. */
+  getPrivacy(id) {
+    return http.get('/whatsapp/numbers/:id/privacy', { params: { id } });
+  },
+
+  /** Atualiza configurações de privacidade. */
+  setPrivacy(id, settings) {
+    return http.post('/whatsapp/numbers/:id/privacy', { params: { id }, body: settings });
+  },
+
+  /** Consulta limites de novas conversas no WhatsApp. */
+  getMessagesLimits(id) {
+    return http.get('/whatsapp/numbers/:id/limits', { params: { id } });
+  },
+
+  /** Lista grupos da instância. */
+  listGroups(id) {
+    return http.get('/whatsapp/numbers/:id/groups', { params: { id } });
+  },
+
+  /** Atualiza nome da instância no Supabase + provider UAZAPI. */
+  updateInstanceName(id, name) {
+    return http.post('/whatsapp/numbers/:id/instance-name', { params: { id }, body: { name } });
+  },
+
   /**
    * Retorna a configuração de webhook da instância.
    * @param {string} id

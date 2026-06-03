@@ -191,6 +191,73 @@ export class WhatsappController {
     });
   }
 
+  async resetInstance(req, res) {
+    return this._handle(res, async () => {
+      const { id } = req.params;
+      const data = await this.service.resetInstance({ tenantId: req.tenantId, id });
+      return { data };
+    });
+  }
+
+  async updateProfileName(req, res) {
+    return this._handle(res, async () => {
+      const { id } = req.params;
+      const { name } = req.body || {};
+      const data = await this.service.updateProfileName({ tenantId: req.tenantId, id, name });
+      return { data };
+    });
+  }
+
+  async updateProfileImage(req, res) {
+    return this._handle(res, async () => {
+      const { id } = req.params;
+      const { image } = req.body || {};
+      const data = await this.service.updateProfileImage({ tenantId: req.tenantId, id, image });
+      return { data };
+    });
+  }
+
+  async getPrivacy(req, res) {
+    return this._handle(res, async () => {
+      const { id } = req.params;
+      const data = await this.service.getPrivacy({ tenantId: req.tenantId, id });
+      return { data };
+    });
+  }
+
+  async setPrivacy(req, res) {
+    return this._handle(res, async () => {
+      const { id } = req.params;
+      const data = await this.service.setPrivacy({ tenantId: req.tenantId, id, settings: req.body || {} });
+      return { data };
+    });
+  }
+
+  async getMessagesLimits(req, res) {
+    return this._handle(res, async () => {
+      const { id } = req.params;
+      const data = await this.service.getMessagesLimits({ tenantId: req.tenantId, id });
+      return { data };
+    });
+  }
+
+  async listGroups(req, res) {
+    return this._handle(res, async () => {
+      const { id } = req.params;
+      const data = await this.service.listGroups({ tenantId: req.tenantId, id });
+      return { data };
+    });
+  }
+
+  async updateInstanceNameOnProvider(req, res) {
+    return this._handle(res, async () => {
+      const { id } = req.params;
+      const { name } = req.body || {};
+      const data = await this.service.updateInstanceNameOnProvider({ tenantId: req.tenantId, id, name });
+      return { data };
+    });
+  }
+
   async streamSSE(req, res) {
     const tenantId = req.tenantId;
     const { id } = req.params;

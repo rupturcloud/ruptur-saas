@@ -436,6 +436,131 @@ export class WhatsappService {
     }
     await this.adapter.proxySSE(row.remote_instance_id, req, res);
   }
+
+  // ─── Reset ────────────────────────────────────────────────────────────────────
+
+  /**
+   * Reinicia o runtime da instância no provider.
+   * Não apaga o registro — útil quando sessão prendeu.
+   */
+  async resetInstance({ tenantId, id }) {
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
+      throw new BusinessError('ERR_NOT_CONNECTED', 'Instância ainda não conectada ao provider.', 400);
+    }
+    return this.adapter.resetInstance(row.remote_instance_id);
+  }
+
+  // ─── Perfil WhatsApp ──────────────────────────────────────────────────────────
+
+  /**
+   * Atualiza nome do perfil WhatsApp (máx 25 chars).
+   */
+  async updateProfileName({ tenantId, id, name }) {
+    if (!name || name.length > 25) {
+      throw new BusinessError('ERR_INVALID_NAME', 'Nome do perfil deve ter entre 1 e 25 caracteres.');
+    }
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
+      throw new BusinessError('ERR_NOT_CONNECTED', 'Instância não está conectada.', 400);
+    }
+    return this.adapter.updateProfileName(row.remote_instance_id, name);
+  }
+
+  /**
+   * Atualiza foto de perfil WhatsApp.
+   * @param {string} image — URL https, base64 ou "remove"
+   */
+  async updateProfileImage({ tenantId, id, image }) {
+    if (!image) throw new BusinessError('ERR_INVALID_IMAGE', 'Informe uma URL, base64 ou "remove".');
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
+      throw new BusinessError('ERR_NOT_CONNECTED', 'Instância não está conectada.', 400);
+    }
+    return this.adapter.updateProfileImage(row.remote_instance_id, image);
+  }
+
+  // ─── Privacidade ──────────────────────────────────────────────────────────────
+
+  async getPrivacy({ tenantId, id }) {
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
+      return { id, privacy: null };
+    }
+    try {
+      const privacy = await this.adapter.getPrivacy(row.remote_instance_id);
+      return { id, privacy };
+    } catch {
+      return { id, privacy: null };
+    }
+  }
+
+  async setPrivacy({ tenantId, id, settings }) {
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
+      throw new BusinessError('ERR_NOT_CONNECTED', 'Instância não está conectada.', 400);
+    }
+    return this.adapter.setPrivacy(row.remote_instance_id, settings);
+  }
+
+  // ─── Limites de mensagens ─────────────────────────────────────────────────────
+
+  async getMessagesLimits({ tenantId, id }) {
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
+      return { id, limits: null };
+    }
+    try {
+      const limits = await this.adapter.getMessagesLimits(row.remote_instance_id);
+      return { id, limits };
+    } catch {
+      return { id, limits: null };
+    }
+  }
+
+  // ─── Grupos ───────────────────────────────────────────────────────────────────
+
+  async listGroups({ tenantId, id }) {
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
+      return { id, groups: [] };
+    }
+    try {
+      const groups = await this.adapter.listGroups(row.remote_instance_id);
+      return { id, groups: Array.isArray(groups) ? groups : (groups?.groups || []) };
+    } catch {
+      return { id, groups: [] };
+    }
+  }
+
+  // ─── Nome da instância no provider ────────────────────────────────────────────
+
+  /**
+   * Atualiza nome da instância tanto no Supabase quanto no provider UAZAPI.
+   * Sobrescreve o updateNumber para também propagar ao provider.
+   */
+  async updateInstanceNameOnProvider({ tenantId, id, name }) {
+    const row = await this.repo.findById({ tenantId, id });
+    if (!row) throw new BusinessError('ERR_NOT_FOUND', 'Número não encontrado.', 404);
+    // Atualiza no banco
+    await this.repo.updateConfig({ id, patch: { name } });
+    // Propaga ao provider UAZAPI se conectado
+    if (row.remote_instance_id && !row.remote_instance_id.startsWith('pending-')) {
+      try {
+        await this.adapter.updateInstanceName(row.remote_instance_id, name);
+      } catch (e) {
+        console.warn('[whatsapp.service] updateInstanceName provider error (ignorado):', e?.message);
+      }
+    }
+    return { id, name };
+  }
 }
 
 export class BusinessError extends Error {
