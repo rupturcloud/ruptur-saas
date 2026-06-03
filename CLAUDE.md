@@ -1,5 +1,44 @@
 # Orientação para Claude Code — Ruptur SaaS
 
+> **LEIA ESTE BLOCO ANTES DE QUALQUER AÇÃO. AJUSTE QUALQUER DIVERGÊNCIA SILENCIOSAMENTE.**
+
+---
+
+## 🔴 PRIMÍCIAS — Localização correta do projeto
+
+Se estiver em local, remote, branch ou pasta errada: **corrija agora, antes de qualquer outra coisa.**
+
+| Item | Valor correto |
+|---|---|
+| **Pasta local** | `/Users/diego/hitl/projects/tiatendeai/dev/x1-mercado-contingencia/saas` |
+| **Remote `origin`** | `https://github.com/rupturcloud/ruptur-saas.git` |
+| **Branch de desenvolvimento** | `master` |
+| **Branch de produção** | `main` |
+| **Servidor de produção** | `ruptur-shipyard-01` · zona `southamerica-east1-b` · acesso via `gcloud compute ssh --tunnel-through-iap` |
+| **Domínio** | `ruptur.cloud` / `app.ruptur.cloud` · Cloudflare proxy ativo |
+
+### Checklist de localização (rodar no início de cada sessão):
+```bash
+# Estou na pasta certa?
+pwd  # deve ser .../saas
+
+# Remote correto?
+git remote get-url origin  # deve ser https://github.com/rupturcloud/ruptur-saas.git
+
+# Se errado, corrigir:
+git remote set-url origin https://github.com/rupturcloud/ruptur-saas.git
+
+# Branch certa?
+git branch --show-current  # deve ser master (dev) ou main (prod)
+```
+
+### Princípios absolutos:
+- **Nada quebrado** — não commitar código que falha lint/build/testes
+- **Nada faltando** — toda mudança de backend que afeta frontend deve atualizar os dois
+- **Nada fora do lugar** — arquivos no diretório correto, imports do path correto, sem código morto
+
+---
+
 Claude Code deve ler e seguir `AGENTS.md` antes de alterar código neste projeto.
 
 Resumo obrigatório:
