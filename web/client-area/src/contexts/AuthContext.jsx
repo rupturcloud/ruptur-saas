@@ -172,30 +172,39 @@ export function AuthProvider({ children }) {
 
     // Listener de mudanças de auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
+      (_event, newSession) => {
         const isInitialAuthEvent = !bootstrappedRef.current;
         if (isInitialAuthEvent) setLoading(true);
+
+        // Atualização SÍNCRONA do estado de sessão.
+        // CRÍTICO: não pode haver `await` de chamadas supabase.auth dentro deste
+        // callback — gera deadlock conhecido do supabase-js (o callback segura um
+        // lock interno; updateUser/refreshSession aguardam esse lock → trava).
+        // Isso travava a tela de troca de senha em "Salvando…".
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
-        try {
-          if (newSession?.user) {
-            await fetchTenant(newSession.user.id);
-            if (newSession.access_token) {
-              await checkPlatformAdmin(newSession.access_token);
+        // Trabalho assíncrono (tenant + platform admin) deferido para FORA do lock.
+        setTimeout(async () => {
+          try {
+            if (newSession?.user) {
+              await fetchTenant(newSession.user.id);
+              if (newSession.access_token) {
+                await checkPlatformAdmin(newSession.access_token);
+              }
+              if (isInitialAuthEvent) finishInitialAuth();
+            } else {
+              setTenant(null);
+              setIsPlatformAdmin(false);
+              if (isInitialAuthEvent) finishInitialAuth();
             }
-            if (isInitialAuthEvent) finishInitialAuth();
-          } else {
+          } catch (err) {
+            console.error('[Auth] Erro ao processar mudança de sessão:', err);
             setTenant(null);
             setIsPlatformAdmin(false);
             if (isInitialAuthEvent) finishInitialAuth();
           }
-        } catch (err) {
-          console.error('[Auth] Erro ao processar mudança de sessão:', err);
-          setTenant(null);
-          setIsPlatformAdmin(false);
-          if (isInitialAuthEvent) finishInitialAuth();
-        }
+        }, 0);
       }
     );
 

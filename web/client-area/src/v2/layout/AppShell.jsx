@@ -4,6 +4,7 @@ import { Icon } from '../../ds/index.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useIdleTimer } from '../../hooks/useIdleTimer.js';
 import IdleWarningModal from '../../components/IdleWarningModal.jsx';
+import ForcePasswordChange from '../../components/ForcePasswordChange.jsx';
 
 const NAV = [
   { section: 'Operação', items: [
@@ -403,8 +404,13 @@ function Topbar() {
 }
 
 export default function AppShell() {
-  const { signOut, isAuthenticated } = useAuth();
+  const { signOut, isAuthenticated, session } = useAuth();
   const navigate = useNavigate();
+
+  // Detecta senha temporária: flag definida na criação via Admin API
+  const [pwJustChanged, setPwJustChanged] = useState(false);
+  const mustChangePassword =
+    session?.user?.user_metadata?.must_change_password === true && !pwJustChanged;
   const [collapsed, setCollapsed] = useState(() => {
     return localStorage.getItem('sidebar-collapsed') === 'true';
   });
@@ -435,6 +441,11 @@ export default function AppShell() {
 
   return (
     <>
+      {/* Troca de senha obrigatória no primeiro acesso */}
+      {mustChangePassword && (
+        <ForcePasswordChange onDone={() => setPwJustChanged(true)} />
+      )}
+
       {idleWarning !== null && (
         <IdleWarningModal
           secondsLeft={idleWarning}
