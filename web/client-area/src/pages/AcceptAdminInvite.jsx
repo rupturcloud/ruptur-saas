@@ -98,8 +98,8 @@ export default function AcceptAdminInvite() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: isSuccess ? 'rgba(34,197,94,.12)' : status === 'error' ? 'rgba(255,68,102,.12)' : 'rgba(0,242,255,.10)',
-          color: isSuccess ? '#22c55e' : status === 'error' ? '#ff4466' : '#00f2ff',
+          background: isSuccess ? 'rgba(34,197,94,.12)' : status === 'error' ? 'rgba(255,68,102,.12)' : 'rgba(255,106,61,.10)',
+          color: isSuccess ? '#22c55e' : status === 'error' ? '#ff4d6a' : '#FF6A3D',
         }}>
           {isLoading ? <Loader2 size={30} className="spin" /> : isSuccess ? <CheckCircle2 size={32} /> : <XCircle size={32} />}
         </div>
@@ -138,7 +138,7 @@ const buttonStyle = {
   justifyContent: 'center',
   padding: '12px 18px',
   borderRadius: 12,
-  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  background: 'linear-gradient(135deg, #FF6A3D 0%, #F0531F 100%)',
   color: 'white',
   textDecoration: 'none',
   fontWeight: 700,

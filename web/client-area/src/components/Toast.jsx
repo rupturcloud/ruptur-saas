@@ -6,7 +6,7 @@ const TOAST_STYLES = {
   success: { bg: 'rgba(0,255,136,0.1)', border: '1px solid rgba(0,255,136,0.3)', color: '#00ff88', icon: CheckCircle2 },
   error: { bg: 'rgba(255,68,102,0.1)', border: '1px solid rgba(255,68,102,0.3)', color: '#ff4466', icon: AlertCircle },
   warning: { bg: 'rgba(255,170,0,0.1)', border: '1px solid rgba(255,170,0,0.3)', color: '#ffaa00', icon: AlertCircle },
-  info: { bg: 'rgba(0,242,255,0.1)', border: '1px solid rgba(0,242,255,0.3)', color: '#00f2ff', icon: Info },
+  info: { bg: 'rgba(255,106,61,0.1)', border: '1px solid rgba(255,106,61,0.3)', color: '#FF6A3D', icon: Info },
 };
 
 export default function Toast({ type = 'info', message, onClose, duration = 4000 }) {

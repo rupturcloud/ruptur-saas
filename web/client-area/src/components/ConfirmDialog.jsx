@@ -116,7 +116,7 @@ export default function ConfirmDialog({
                 padding: '10px 16px',
                 borderRadius: 8,
                 border: 'none',
-                background: isDangerous ? 'rgba(255, 68, 102, 0.8)' : 'rgba(0, 242, 255, 0.8)',
+                background: isDangerous ? 'rgba(255, 68, 102, 0.8)' : 'rgba(255, 106, 61, 0.8)',
                 color: 'white',
                 cursor: 'pointer',
                 fontSize: '0.875rem',
@@ -124,10 +124,10 @@ export default function ConfirmDialog({
                 transition: 'all 0.2s',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = isDangerous ? 'rgba(255, 68, 102, 1)' : 'rgba(0, 242, 255, 1)';
+                e.currentTarget.style.background = isDangerous ? 'rgba(255, 68, 102, 1)' : 'rgba(255, 106, 61, 1)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = isDangerous ? 'rgba(255, 68, 102, 0.8)' : 'rgba(0, 242, 255, 0.8)';
+                e.currentTarget.style.background = isDangerous ? 'rgba(255, 68, 102, 0.8)' : 'rgba(255, 106, 61, 0.8)';
               }}
             >
               {confirmLabel}

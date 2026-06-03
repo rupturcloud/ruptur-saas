@@ -47,7 +47,7 @@ export default function AccessDenied() {
           justifyContent: 'center',
           padding: '12px 18px',
           borderRadius: 12,
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          background: 'linear-gradient(135deg, #FF6A3D 0%, #F0531F 100%)',
           color: 'white',
           textDecoration: 'none',
           fontWeight: 700,

@@ -28,8 +28,8 @@ export default function ProtectedRoute({ requireAdmin = false, requirePlatformAd
           <div style={{
             width: 40,
             height: 40,
-            border: '3px solid rgba(0,242,255,0.2)',
-            borderTop: '3px solid #00f2ff',
+            border: '3px solid rgba(255,106,61,0.2)',
+            borderTop: '3px solid #FF6A3D',
             borderRadius: '50%',
             animation: 'spin 0.8s linear infinite',
             margin: '0 auto 16px',

@@ -343,7 +343,7 @@ const Inbox = () => {
           padding: 10px 20px;
           border-radius: 10px;
           border: 1px solid var(--primary);
-          background: rgba(0, 242, 255, 0.1);
+          background: rgba(255, 106, 61, 0.1);
           color: var(--primary);
           cursor: pointer;
           font-weight: 600;
@@ -351,7 +351,7 @@ const Inbox = () => {
         }
 
         .btn-retry:hover {
-          background: rgba(0, 242, 255, 0.2);
+          background: rgba(255, 106, 61, 0.2);
         }
 
         /* Novo layout com sidebar */
@@ -409,7 +409,7 @@ const Inbox = () => {
           display: flex;
           align-items: center;
           gap: 8px;
-          background: rgba(0, 242, 255, 0.05);
+          background: rgba(255, 106, 61, 0.05);
           border-bottom: 1px solid var(--border-glass);
         }
 
@@ -445,17 +445,17 @@ const Inbox = () => {
         }
 
         .sidebar-chats::-webkit-scrollbar-thumb {
-          background: rgba(0, 242, 255, 0.3);
+          background: rgba(255, 106, 61, 0.3);
           border-radius: 3px;
         }
 
         .sidebar-chats::-webkit-scrollbar-thumb:hover {
-          background: rgba(0, 242, 255, 0.5);
+          background: rgba(255, 106, 61, 0.5);
         }
 
         .chat-item {
           padding: 12px 8px;
-          border-bottom: 1px solid rgba(0, 242, 255, 0.1);
+          border-bottom: 1px solid rgba(255, 106, 61, 0.1);
           cursor: pointer;
           display: flex;
           gap: 10px;
@@ -465,11 +465,11 @@ const Inbox = () => {
         }
 
         .chat-item:hover {
-          background: rgba(0, 242, 255, 0.1);
+          background: rgba(255, 106, 61, 0.1);
         }
 
         .chat-item.active {
-          background: rgba(0, 242, 255, 0.15);
+          background: rgba(255, 106, 61, 0.15);
           border-left: 3px solid var(--primary);
           padding-left: 5px;
         }
@@ -478,7 +478,7 @@ const Inbox = () => {
           width: 40px;
           height: 40px;
           border-radius: 50%;
-          background: rgba(0, 242, 255, 0.2);
+          background: rgba(255, 106, 61, 0.2);
           display: flex;
           align-items: center;
           justify-content: center;

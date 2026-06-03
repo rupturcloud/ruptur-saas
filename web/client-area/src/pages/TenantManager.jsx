@@ -28,7 +28,7 @@ const STATUS_COLOR = {
   active:    { bg: 'rgba(0,255,136,.12)', color: '#00ff88', label: 'Ativo' },
   suspended: { bg: 'rgba(255,170,0,.12)', color: '#ffaa00', label: 'Suspenso' },
   cancelled: { bg: 'rgba(255,77,106,.12)', color: '#ff4d6a', label: 'Cancelado' },
-  pending:   { bg: 'rgba(0,242,255,.12)', color: '#00f2ff', label: 'Pendente' },
+  pending:   { bg: 'rgba(255,106,61,.12)', color: '#FF6A3D', label: 'Pendente' },
 };
 
 const PLAN_COLOR = {
@@ -275,7 +275,7 @@ function MembersModal({ tenant, onClose }) {
                   <div style={{ color: 'var(--text-main)', fontSize: 13, fontWeight: 500 }}>{m.email}</div>
                   <span style={{
                     fontSize: 10, fontWeight: 700, color: 'var(--primary)',
-                    background: 'rgba(0,242,255,.1)', padding: '1px 6px', borderRadius: 4,
+                    background: 'rgba(255,106,61,.1)', padding: '1px 6px', borderRadius: 4,
                   }}>{m.role}</span>
                 </div>
                 <button
@@ -360,7 +360,7 @@ export default function TenantManager() {
       {/* Resumo */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
         {[
-          { label: 'Total',    value: tenants.length,                                                  icon: <Building2 size={16} />, color: '#00f2ff' },
+          { label: 'Total',    value: tenants.length,                                                  icon: <Building2 size={16} />, color: '#FF6A3D' },
           { label: 'Ativos',   value: tenants.filter(t => t.status === 'active').length,               icon: <CheckCircle size={16} />, color: '#00ff88' },
           { label: 'Suspensos',value: tenants.filter(t => t.status === 'suspended').length,            icon: <XCircle size={16} />, color: '#ffaa00' },
           { label: 'Créditos', value: tenants.reduce((s, t) => s + (t.balance || 0), 0).toLocaleString('pt-BR'), icon: <Zap size={16} />, color: '#a855f7' },
@@ -502,7 +502,7 @@ const styles = {
   },
   btnPrimary: {
     display: 'flex', alignItems: 'center', gap: 6,
-    background: 'linear-gradient(135deg, var(--secondary, #7000ff), var(--primary, #00f2ff))',
+    background: 'linear-gradient(135deg, var(--secondary, #F0531F), var(--primary, #FF6A3D))',
     color: '#000', border: 'none', borderRadius: 8,
     padding: '9px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer',
   },
