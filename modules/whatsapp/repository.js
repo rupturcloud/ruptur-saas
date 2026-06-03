@@ -16,7 +16,7 @@ export class WhatsappRepository {
     this.db = supabase;
   }
 
-  /** Lista todos os números do tenant (join com tenant_providers e provider_accounts). */
+  /** Lista todos os números do tenant (join com tenant_providers). */
   async listByTenant(tenantId) {
     const { data, error } = await this.db
       .from('instance_registry')
@@ -37,7 +37,29 @@ export class WhatsappRepository {
       .eq('tenant_providers.tenant_id', tenantId)
       .order('updated_at', { ascending: false });
     if (error) throw error;
-    return data || [];
+
+    const rows = data || [];
+    if (!rows.length) return rows;
+
+    // Resolve account_kind via provider_accounts (sem FK explícita no schema cache)
+    const accountIds = [...new Set(
+      rows.map(r => r.tenant_providers?.account_id).filter(Boolean)
+    )];
+    let accountKindMap = {};
+    if (accountIds.length) {
+      const { data: accounts } = await this.db
+        .from('provider_accounts')
+        .select('id, account_kind')
+        .in('id', accountIds);
+      if (accounts) {
+        accountKindMap = Object.fromEntries(accounts.map(a => [a.id, a.account_kind]));
+      }
+    }
+
+    return rows.map(row => ({
+      ...row,
+      account_kind: accountKindMap[row.tenant_providers?.account_id] ?? 'paid',
+    }));
   }
 
   async findById({ tenantId, id }) {
