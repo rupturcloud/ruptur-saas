@@ -15,6 +15,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [tenant, setTenant] = useState(null);
+  const [tenants, setTenants] = useState([]);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
@@ -26,11 +27,10 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  // Busca dados do tenant vinculado ao user
+  // Busca todos os tenants do user e define o ativo (respeitando escolha persistida).
+  // Multi-tenant: alimenta o seletor de tenant (TenantSwitcher).
   const fetchTenant = useCallback(async (userId) => {
     try {
-      logger.debug('[Auth] Iniciando fetchTenant', { userId });
-
       const { data: memberships, error: membError } = await supabase
         .from('user_tenant_memberships')
         .select('tenant_id, role')
@@ -38,68 +38,55 @@ export function AuthProvider({ children }) {
 
       if (membError) {
         logger.error('[Auth] Erro ao buscar memberships', membError, { userId });
-        setTenant(null);
+        setTenant(null); setTenants([]);
         return;
       }
-
       if (!memberships || memberships.length === 0) {
         logger.info('[Auth] Usuário sem tenant vinculado', { userId });
-        setTenant(null);
+        setTenant(null); setTenants([]);
         return;
       }
 
-      logger.debug('[Auth] Memberships encontradas', { count: memberships.length, memberships });
-      let selectedMembership = memberships[0];
-
-      // Preferir ruptur-os (slug oficial) > ruptur-demo (legado) > primeiro disponível
-      const { data: rupturCandidates } = await supabase
+      // Carrega TODOS os tenants das memberships (para o seletor multi-tenant)
+      const tenantIds = memberships.map((m) => m.tenant_id);
+      const { data: tenantRows, error: tErr } = await supabase
         .from('tenants')
-        .select('id, slug, name, plan, status, created_at, updated_at')
-        .or('slug.eq.ruptur-os,name.eq.Ruptur (PROD)');
+        .select('id, slug, name, plan, status')
+        .in('id', tenantIds);
+      if (tErr) logger.warn('[Auth] Erro ao buscar tenants', tErr);
 
-      let foundRuptur = null;
-      for (const candidate of (rupturCandidates || []).sort((a, b) =>
-        a.slug === 'ruptur-os' ? -1 : b.slug === 'ruptur-os' ? 1 : 0
-      )) {
-        const m = memberships.find(x => x.tenant_id === candidate.id);
-        if (m) { foundRuptur = { tenant: candidate, membership: m }; break; }
-      }
+      const roleByTenant = Object.fromEntries(memberships.map((m) => [m.tenant_id, m.role]));
+      const list = (tenantRows || []).map((t) => ({ ...t, userRole: roleByTenant[t.id] || 'member' }));
+      setTenants(list);
 
-      if (foundRuptur) {
-        selectedMembership = { ...foundRuptur.membership, tenantData: foundRuptur.tenant };
-        logger.info('[Auth] Tenant Ruptur selecionado', { slug: foundRuptur.tenant.slug, tenantId: foundRuptur.tenant.id });
-      } else if (!selectedMembership.tenantData) {
-        const { data: tenantData, error: tenantError } = await supabase
-          .from('tenants')
-          .select('id, slug, name, plan, status, created_at, updated_at')
-          .eq('id', selectedMembership.tenant_id)
-          .maybeSingle();
+      // Tenant ativo: escolha persistida > preferência (ruptur-os > "Ruptur (PROD)") > primeiro
+      let persisted = null;
+      try { persisted = window.localStorage.getItem('ruptur_active_tenant'); } catch { /* noop */ }
+      const active = (persisted && list.find((t) => t.id === persisted))
+        || list.find((t) => t.slug === 'ruptur-os')
+        || list.find((t) => t.name === 'Ruptur (PROD)')
+        || list[0]
+        || null;
 
-        if (tenantError) {
-          logger.warn('[Auth] Erro ao buscar tenant data', tenantError, { tenantId: selectedMembership.tenant_id });
-        }
-        selectedMembership.tenantData = tenantData;
-      }
-
-      if (selectedMembership.tenantData) {
-        logger.info('[Auth] Tenant carregado com sucesso', {
-          tenantId: selectedMembership.tenantData.id,
-          tenantName: selectedMembership.tenantData.name,
-          userRole: selectedMembership.role,
-        });
-        setTenant({
-          ...selectedMembership.tenantData,
-          userRole: selectedMembership.role,
-        });
+      if (active) {
+        logger.info('[Auth] Tenant ativo', { slug: active.slug, tenantId: active.id });
+        setTenant(active);
       } else {
-        logger.warn('[Auth] Nenhum tenant data disponível após queries', { selectedMembership });
         setTenant(null);
       }
     } catch (err) {
       logger.error('[Auth] Erro inesperado em fetchTenant', err, { userId });
-      setTenant(null);
+      setTenant(null); setTenants([]);
     }
   }, []);
+
+  // Troca o tenant ativo (multi-tenant) e persiste a escolha em localStorage.
+  const switchTenant = useCallback((tenantId) => {
+    const next = tenants.find((t) => t.id === tenantId);
+    if (!next) return;
+    try { window.localStorage.setItem('ruptur_active_tenant', tenantId); } catch { /* noop */ }
+    setTenant(next);
+  }, [tenants]);
 
   // Verifica se o usuário é superadmin
   const checkPlatformAdmin = useCallback(async (token) => {
@@ -271,9 +258,11 @@ export function AuthProvider({ children }) {
   // Sign Out
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
+    try { window.localStorage.removeItem('ruptur_active_tenant'); } catch { /* noop */ }
     setSession(null);
     setUser(null);
     setTenant(null);
+    setTenants([]);
   }, []);
 
   // Helpers derivados
@@ -286,7 +275,10 @@ export function AuthProvider({ children }) {
   // Inbox leem window.__ruptur.auth. Esse contrato já está DOCUMENTADO nesses
   // arquivos ("setado por AuthContext"), mas nunca era cumprido — sem ele o
   // gateway recebe requests sem Authorization: Bearer e responde 401.
-  // Aditivo: só ESCREVE o global, não altera nenhum fluxo de auth existente.
+  //
+  // A corrida de timing (efeito do pai roda após os filhos) é tratada no
+  // inbox.api.js, que usa o localStorage 'ruptur_active_tenant' como fallback
+  // síncrono do tenantId. Aqui mantemos o efeito (sem mutar no render).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const token = session?.access_token || null;
@@ -299,6 +291,7 @@ export function AuthProvider({ children }) {
     session,
     user,
     tenant,
+    tenants,
     tenantId,
     loading,
     authReady,
@@ -312,6 +305,7 @@ export function AuthProvider({ children }) {
     signUp,
     signIn,
     signOut,
+    switchTenant,
     fetchTenant,
     checkPlatformAdmin,
   };

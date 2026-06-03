@@ -514,7 +514,7 @@ function Bubble({ msg }) {
 // Componente principal
 // ---------------------------------------------------------------------------
 export default function Inbox() {
-  const { authReady, user } = useAuth();
+  const { authReady, user, tenantId } = useAuth();
   const userId = user?.id || null;
 
   // Instâncias
@@ -636,9 +636,9 @@ export default function Inbox() {
   useEffect(() => { reloadChatsRef.current = reloadChats; loadMessagesRef.current = loadMessages; }, [reloadChats, loadMessages]);
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
 
-  // Carrega instâncias quando auth estiver pronto (loader async: setState pós-await)
+  // Carrega instâncias quando auth estiver pronto OU ao trocar de tenant (tenantId)
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { if (authReady) loadInstances(); }, [authReady, loadInstances]);
+  useEffect(() => { if (authReady) loadInstances(); }, [authReady, tenantId, loadInstances]);
 
   // Instância mudou → carrega etiquetas dela (o reset de contexto vive em changeInstance)
   // eslint-disable-next-line react-hooks/set-state-in-effect

@@ -17,7 +17,16 @@
  */
 
 function auth() {
-  return window.__ruptur?.auth || {};
+  const a = window.__ruptur?.auth || {};
+  // Fallback do tenantId: durante o bootstrap, o efeito do AuthContext que escreve
+  // window.__ruptur roda DEPOIS dos filhos — a 1ª busca poderia sair sem tenantId e
+  // cair no tenant default. A escolha persistida no localStorage é a fonte síncrona
+  // confiável (gravada por switchTenant), então a usamos quando o global ainda não tem.
+  let tenantId = a.tenantId;
+  if (!tenantId) {
+    try { tenantId = window.localStorage.getItem('ruptur_active_tenant') || undefined; } catch { /* noop */ }
+  }
+  return { token: a.token, tenantId };
 }
 
 async function call(path, { method = 'GET', body } = {}) {

@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useIdleTimer } from '../../hooks/useIdleTimer.js';
 import IdleWarningModal from '../../components/IdleWarningModal.jsx';
 import ForcePasswordChange from '../../components/ForcePasswordChange.jsx';
+import TenantSwitcher from './TenantSwitcher.jsx';
 
 const NAV = [
   { section: 'Operação', items: [
@@ -412,6 +413,7 @@ function Topbar() {
   const navigate = useNavigate();
   return (
     <div className="topbar">
+      <TenantSwitcher />
       <div className="input-search" style={{ flex: 1, maxWidth: 380 }}>
         <Icon name="search" size={14} />
         <input className="input" placeholder="Buscar leads, contas, conversas…" />

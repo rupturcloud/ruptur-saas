@@ -42,19 +42,35 @@ import { createUazapiAdapter } from '../modules/provider-adapter/uazapi-adapter.
  * Segurança: sem essa validação, um usuário poderia passar qualquer instanceKey
  * e acessar dados de outro tenant.
  */
+// ─── Helper: ids de tenant_providers de um tenant ──────────────────────────────
+// IMPORTANTE: instance_registry NÃO tem coluna tenant_id. O vínculo com o tenant é
+// instance_registry.tenant_provider_id → tenant_providers.id (que tem tenant_id).
+async function tenantProviderIds(supabase, tenantId) {
+  const { data, error } = await supabase
+    .from('tenant_providers')
+    .select('id')
+    .eq('tenant_id', tenantId);
+  if (error) throw new Error(`Erro ao resolver providers do tenant: ${error.message}`);
+  return (data || []).map((t) => t.id);
+}
+
 async function resolveInstance(supabase, tenantId, instanceKey) {
-  // 1. Validar que a instância existe e pertence ao tenant
+  // 1. Resolver os providers do tenant (instance_registry liga via tenant_provider_id)
+  const tpIds = await tenantProviderIds(supabase, tenantId);
+  if (!tpIds.length) throw new Error('Instância não encontrada ou sem acesso neste tenant');
+
+  // 2. Validar que a instância existe e pertence a um provider do tenant
   const { data: instance, error: iErr } = await supabase
     .from('instance_registry')
     .select('id, remote_instance_id, provider_account_id, status, instance_name')
-    .eq('tenant_id', tenantId)
+    .in('tenant_provider_id', tpIds)
     .eq('remote_instance_id', instanceKey)
     .maybeSingle();
 
   if (iErr) throw new Error(`Erro ao buscar instância: ${iErr.message}`);
   if (!instance) throw new Error('Instância não encontrada ou sem acesso neste tenant');
 
-  // 2. Buscar provider_account para obter server_url e admin_token_enc
+  // 3. Buscar provider_account para obter server_url e admin_token_enc
   const { data: account, error: aErr } = await supabase
     .from('provider_accounts')
     .select('id, server_url, admin_token_enc')
@@ -97,12 +113,15 @@ export async function handleGetInstances(req, res, json, supabase) {
   if (!tenantId) return json(res, 403, { error: 'Tenant não identificado' }, req);
 
   try {
+    const tpIds = await tenantProviderIds(supabase, tenantId);
+    if (!tpIds.length) return json(res, 200, { instances: [] }, req);
+
     const { data: instances, error } = await supabase
       .from('instance_registry')
-      .select('id, remote_instance_id, instance_name, phone, status, platform, is_business, token_last4')
-      .eq('tenant_id', tenantId)
+      .select('id, remote_instance_id, instance_name, instance_number, status, platform, is_business, token_last4')
+      .in('tenant_provider_id', tpIds)
       .neq('status', 'deleted')
-      .order('created_at', { ascending: false });
+      .order('updated_at', { ascending: false });
 
     if (error) throw error;
 
@@ -111,7 +130,7 @@ export async function handleGetInstances(req, res, json, supabase) {
         id: i.id,
         key: i.remote_instance_id,
         name: i.instance_name,
-        phone: i.phone,
+        phone: i.instance_number,
         status: i.status,        // connected | disconnected | connecting
         platform: i.platform,
         isBusiness: i.is_business,
