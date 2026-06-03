@@ -10,3 +10,9 @@ runtime-data/instance-dna/**
 coverage/
 .nyc_output/
 .infisical-secrets.json
+
+# Configurações e sessões de agentes Claude — nunca commitar
+.claude/
+
+# dist-client (artefato de build, não código-fonte)
+dist-client/
