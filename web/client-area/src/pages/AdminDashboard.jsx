@@ -514,7 +514,7 @@ export default function AdminDashboard() {
                 <StatCard label="Créditos em circulação" value={Number(totals.credits || 0).toLocaleString('pt-BR')} icon={<Zap size={22} />} accent="#a855f7" />
                 <StatCard label="Instâncias conectadas" value={`${totals.connectedInstances || 0}/${totals.instances || 0}`} icon={<Smartphone size={22} />} accent="#ff007a" />
                 <StatCard label="Contas UAZAPI" value={providerAccounts.length || 0} icon={<Server size={22} />} accent="#ffaa00" />
-                <StatCard label="Gateways de pagamento" value={paymentGateways.length || 0} icon={<CreditCard size={22} />} accent="#38bdf8" />
+                <StatCard label="Gateways de pagamento" value={paymentGateways.length || 0} icon={<CreditCard size={22} />} accent="#FFB088" />
                 <StatCard label="Planos comerciais" value={totals.commercialPlans || 0} icon={<Zap size={22} />} accent="#22c55e" />
                 <StatCard label="Tickets suporte" value={totals.supportTickets || 0} icon={<Shield size={22} />} accent="#f97316" />
               </div>

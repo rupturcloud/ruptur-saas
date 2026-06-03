@@ -281,6 +281,19 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.email === 'admin@ruptur.cloud' || tenant?.userRole === 'owner';
   const tenantId = tenant?.id ?? null;
 
+  // Expõe { token, tenantId } no escopo global para os clients HTTP que vivem
+  // fora da árvore React: httpClient.js, inbox.api.js, admin.api.js e o SSE do
+  // Inbox leem window.__ruptur.auth. Esse contrato já está DOCUMENTADO nesses
+  // arquivos ("setado por AuthContext"), mas nunca era cumprido — sem ele o
+  // gateway recebe requests sem Authorization: Bearer e responde 401.
+  // Aditivo: só ESCREVE o global, não altera nenhum fluxo de auth existente.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const token = session?.access_token || null;
+    window.__ruptur = window.__ruptur || {};
+    window.__ruptur.auth = token ? { token, tenantId } : null;
+  }, [session, tenantId]);
+
   const value = {
     // Estado
     session,

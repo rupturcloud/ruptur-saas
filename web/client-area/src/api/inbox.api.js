@@ -29,6 +29,7 @@ async function call(path, { method = 'GET', body } = {}) {
   const res = await fetch(path, {
     method,
     headers,
+    credentials: 'include', // paridade com httpClient: envia cookie de sessão como fallback
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
