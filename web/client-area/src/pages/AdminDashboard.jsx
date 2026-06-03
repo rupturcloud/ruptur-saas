@@ -224,7 +224,7 @@ function money(cents) {
 }
 
 export default function AdminDashboard() {
-  const { user, session } = useAuth();
+  const { session } = useAuth();
   const [activeView, setActiveView] = useState('overview');
   const [stats, setStats] = useState(null);
   const [clients, setClients] = useState([]);

@@ -106,37 +106,48 @@ export class TenantConfigService {
     try {
       if (!tenantId) throw new Error('tenantId é obrigatório');
 
-      let query = this.supabase
-        .from('user_tenant_roles')
-        .select(`
-          id,
-          user_id,
-          role,
-          created_at,
-          updated_at,
-          deleted_at,
-          deleted_by
-        `)
-        .eq('tenant_id', tenantId);
-
-      if (!includeInactive) {
-        // Se há coluna status, filtrar por active
-        // Caso contrário, filtrar por deleted_at IS NULL
-        query = query.is('deleted_at', null);
-      }
-
-      const { data: members, error } = await query;
+      // CORREÇÃO: usar user_tenant_memberships (user_tenant_roles não existe)
+      const { data: memberships, error } = await this.supabase
+        .from('user_tenant_memberships')
+        .select('id, user_id, role, created_at')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
+      if (!memberships || memberships.length === 0) return [];
 
-      return members.map(m => ({
-        userId: m.user_id,
-        role: m.role,
-        createdAt: m.created_at,
-        updatedAt: m.updated_at,
-        deletedAt: m.deleted_at,
-        deletedBy: m.deleted_by
-      }));
+      // Buscar dados de perfil dos usuários (email, full_name)
+      const userIds = memberships.map(m => m.user_id);
+      const { data: userProfiles } = await this.supabase
+        .from('users')
+        .select('id, email, full_name, role')
+        .in('id', userIds);
+
+      const profileMap = {};
+      (userProfiles || []).forEach(u => { profileMap[u.id] = u; });
+
+      // Buscar status de confirmação de email via Admin API
+      const authStatusMap = {};
+      try {
+        const { data: authData } = await this.supabase.auth.admin.listUsers({ perPage: 200 });
+        (authData?.users || []).forEach(u => {
+          authStatusMap[u.id] = !!u.email_confirmed_at;
+        });
+      } catch {
+        // Admin API pode não estar disponível — continua sem email_confirmed
+      }
+
+      return memberships.map(m => {
+        const profile = profileMap[m.user_id] || {};
+        return {
+          user_id: m.user_id,
+          role: m.role,
+          email: profile.email || null,
+          full_name: profile.full_name || null,
+          email_confirmed: authStatusMap[m.user_id] ?? false,
+          created_at: m.created_at,
+        };
+      });
     } catch (error) {
       console.error('[TenantConfig] getTenantMembers error:', error.message);
       throw error;
@@ -156,56 +167,47 @@ export class TenantConfigService {
         throw new Error(`Role inválido: ${newRole}`);
       }
 
-      // Verificar permissão: apenas owners podem mudar roles
-      const { data: updaterRole } = await this.supabase
-        .from('user_tenant_roles')
+      // Verificar permissão: owners e admins podem mudar roles
+      // CORREÇÃO: tabela correta é user_tenant_memberships
+      const { data: updaterMembership } = await this.supabase
+        .from('user_tenant_memberships')
         .select('role')
         .eq('tenant_id', tenantId)
         .eq('user_id', updatedBy)
         .single();
 
-      if (!updaterRole || updaterRole.role !== 'owner') {
-        throw new Error('Apenas owners podem mudar roles');
+      if (!updaterMembership || !['owner', 'admin'].includes(updaterMembership.role)) {
+        throw new Error('Apenas owners e admins podem mudar roles');
       }
 
-      // Buscar role atual
-      const { data: currentRole } = await this.supabase
-        .from('user_tenant_roles')
+      // Buscar membership atual do membro alvo
+      const { data: currentMembership } = await this.supabase
+        .from('user_tenant_memberships')
         .select('id, role')
         .eq('tenant_id', tenantId)
         .eq('user_id', userId)
         .single();
 
-      if (!currentRole) {
+      if (!currentMembership) {
         throw new Error('Membro não encontrado');
       }
 
-      const oldRole = currentRole.role;
+      const oldRole = currentMembership.role;
 
-      // Se downgrading admin, verificar que há outro admin/owner
-      if (oldRole === 'admin' && newRole !== 'admin') {
-        const { count } = await this.supabase
-          .from('user_tenant_roles')
-          .select('*', { count: 'exact' })
-          .eq('tenant_id', tenantId)
-          .in('role', ['admin', 'owner'])
-          .is('deleted_at', null);
-
-        if (count <= 1) {
-          throw new Error('Não é possível remover último admin/owner');
-        }
-      }
-
-      // Atualizar role
+      // Atualizar role na user_tenant_memberships
       const { error: updateError } = await this.supabase
-        .from('user_tenant_roles')
-        .update({
-          role: newRole,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', currentRole.id);
+        .from('user_tenant_memberships')
+        .update({ role: newRole })
+        .eq('id', currentMembership.id);
 
       if (updateError) throw updateError;
+
+      // Atualizar também na tabela users (role denormalizado)
+      await this.supabase
+        .from('users')
+        .update({ role: newRole })
+        .eq('id', userId)
+        .eq('tenant_id', tenantId);
 
       // Registrar em audit
       await this._auditLog(tenantId, updatedBy, 'member_role_updated', 'user_role', userId,

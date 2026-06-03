@@ -27,16 +27,17 @@ export async function handleAdminTenantRoutes(req, res, supabase) {
 
   const tenantId = tenantMatch[1];
 
-  // Verificar permissão: apenas owners podem acessar admin
-  const { data: userRole } = await supabase
-    .from('user_tenant_roles')
+  // Verificar permissão: owner ou admin podem acessar admin do tenant
+  // CORREÇÃO: tabela correta é user_tenant_memberships (não user_tenant_roles que não existe)
+  const { data: membership } = await supabase
+    .from('user_tenant_memberships')
     .select('role')
     .eq('tenant_id', tenantId)
     .eq('user_id', user.id)
     .single();
 
-  if (!userRole || userRole.role !== 'owner') {
-    return createResponse(res, 403, { error: 'Acesso negado: requer permissão de owner' });
+  if (!membership || !['owner', 'admin'].includes(membership.role)) {
+    return createResponse(res, 403, { error: 'Acesso negado: requer permissão de owner ou admin' });
   }
 
   const tenantService = new TenantConfigService(supabase);

@@ -6,9 +6,16 @@ import { useState, useEffect } from 'react';
 
 export default function IdleWarningModal({ secondsLeft, onStay, onLeave }) {
   const [count, setCount] = useState(secondsLeft);
+  const [prevSeconds, setPrevSeconds] = useState(secondsLeft);
+
+  // Padrão recomendado pelo React: ajustar estado durante a renderização
+  // quando a prop muda, em vez de chamar setState dentro do efeito.
+  if (secondsLeft !== prevSeconds) {
+    setPrevSeconds(secondsLeft);
+    setCount(secondsLeft);
+  }
 
   useEffect(() => {
-    setCount(secondsLeft);
     const interval = setInterval(() => {
       setCount(prev => {
         if (prev <= 1) { clearInterval(interval); return 0; }

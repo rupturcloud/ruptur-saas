@@ -2464,102 +2464,47 @@ async function handler(req, res) {
   //               /chat/editLead, /group/list, /sse
   // ================================================================
 
-  // GET /api/inbox/instances — lista instâncias do tenant (sidebar do inbox)
-  if (pathname === '/api/inbox/instances' && req.method === 'GET') {
-    const user = await extractUser(req);
-    if (!user) return json(res, 401, { error: 'Não autenticado' }, req);
-    if (!supabase) return json(res, 503, { error: 'Supabase não configurado' }, req);
-    req.user = user;
-    return inboxRoutes.handleGetInstances(req, res, json, supabase);
-  }
-
-  // POST /api/inbox/chats — busca chats com filtros (spec: /chat/find)
-  if (pathname === '/api/inbox/chats' && req.method === 'POST') {
-    const user = await extractUser(req);
-    if (!user) return json(res, 401, { error: 'Não autenticado' }, req);
-    if (!supabase) return json(res, 503, { error: 'Supabase não configurado' }, req);
-    const body = await parseBody(req);
-    req.user = user; req.body = body;
-    return inboxRoutes.handleFindChats(req, res, json, supabase);
-  }
-
-  // POST /api/inbox/messages — histórico de mensagens de um chat (spec: /message/find)
-  if (pathname === '/api/inbox/messages' && req.method === 'POST') {
-    const user = await extractUser(req);
-    if (!user) return json(res, 401, { error: 'Não autenticado' }, req);
-    if (!supabase) return json(res, 503, { error: 'Supabase não configurado' }, req);
-    const body = await parseBody(req);
-    req.user = user; req.body = body;
-    return inboxRoutes.handleFindMessages(req, res, json, supabase);
-  }
-
-  // POST /api/inbox/send — envia mensagem texto ou mídia (spec: /send/text, /send/media)
-  if (pathname === '/api/inbox/send' && req.method === 'POST') {
-    const user = await extractUser(req);
-    if (!user) return json(res, 401, { error: 'Não autenticado' }, req);
-    if (!supabase) return json(res, 503, { error: 'Supabase não configurado' }, req);
-    const body = await parseBody(req);
-    req.user = user; req.body = body;
-    return inboxRoutes.handleSendMessage(req, res, json, supabase);
-  }
-
-  // POST /api/inbox/markread — marca mensagens como lidas (spec: /message/markread)
-  if (pathname === '/api/inbox/markread' && req.method === 'POST') {
-    const user = await extractUser(req);
-    if (!user) return json(res, 401, { error: 'Não autenticado' }, req);
-    if (!supabase) return json(res, 503, { error: 'Supabase não configurado' }, req);
-    const body = await parseBody(req);
-    req.user = user; req.body = body;
-    return inboxRoutes.handleMarkRead(req, res, json, supabase);
-  }
-
-  // POST /api/inbox/react — reação a mensagem (spec: /message/react)
-  if (pathname === '/api/inbox/react' && req.method === 'POST') {
-    const user = await extractUser(req);
-    if (!user) return json(res, 401, { error: 'Não autenticado' }, req);
-    if (!supabase) return json(res, 503, { error: 'Supabase não configurado' }, req);
-    const body = await parseBody(req);
-    req.user = user; req.body = body;
-    return inboxRoutes.handleReact(req, res, json, supabase);
-  }
-
-  // POST /api/inbox/lead — edita dados do lead (spec: /chat/editLead)
-  if (pathname === '/api/inbox/lead' && req.method === 'POST') {
-    const user = await extractUser(req);
-    if (!user) return json(res, 401, { error: 'Não autenticado' }, req);
-    if (!supabase) return json(res, 503, { error: 'Supabase não configurado' }, req);
-    const body = await parseBody(req);
-    req.user = user; req.body = body;
-    return inboxRoutes.handleEditLead(req, res, json, supabase);
-  }
-
-  // GET /api/inbox/labels/:instanceKey — etiquetas da instância (spec: /chat/labels)
-  const inboxLabelsMatch = pathname.match(/^\/api\/inbox\/labels\/([^/]+)$/);
-  if (inboxLabelsMatch && req.method === 'GET') {
-    const user = await extractUser(req);
-    if (!user) return json(res, 401, { error: 'Não autenticado' }, req);
-    if (!supabase) return json(res, 503, { error: 'Supabase não configurado' }, req);
-    req.user = user; req.params = { instanceKey: inboxLabelsMatch[1] };
-    return inboxRoutes.handleGetLabels(req, res, json, supabase);
-  }
-
-  // GET /api/inbox/groups/:instanceKey — grupos da instância (spec: /group/list)
-  const inboxGroupsMatch = pathname.match(/^\/api\/inbox\/groups\/([^/]+)$/);
-  if (inboxGroupsMatch && req.method === 'GET') {
-    const user = await extractUser(req);
-    if (!user) return json(res, 401, { error: 'Não autenticado' }, req);
-    if (!supabase) return json(res, 503, { error: 'Supabase não configurado' }, req);
-    req.user = user; req.params = { instanceKey: inboxGroupsMatch[1] };
-    return inboxRoutes.handleGetGroups(req, res, json, supabase);
-  }
-
-  // GET /api/inbox/sse/:instanceKey — SSE relay tempo real (spec: /sse)
-  // EventSource não suporta headers → JWT via query param ?token=
+  // SSE relay — autentica via query token (?token=) internamente, tratar antes
   const inboxSSEMatch = pathname.match(/^\/api\/inbox\/sse\/([^/]+)$/);
   if (inboxSSEMatch && req.method === 'GET') {
     if (!supabase) { res.writeHead(503); return res.end('Supabase não configurado'); }
     req.params = { instanceKey: inboxSSEMatch[1] };
     return inboxRoutes.handleSSERelay(req, res, supabase, extractUser);
+  }
+
+  // Demais rotas /api/inbox/* — FIX: resolve auth + tenant UMA vez e injeta req.tenantId
+  // (antes os handlers liam req.user?.tenantId que o gateway nunca setava → 403 sempre)
+  if (pathname.startsWith('/api/inbox/')) {
+    const user = await extractUser(req);
+    if (!user) return json(res, 401, { error: 'Não autenticado' }, req);
+    if (!supabase) return json(res, 503, { error: 'Supabase não configurado' }, req);
+    // Tenant: header/query validado por membership; senão o tenant padrão do usuário
+    const requestedTid = req.headers['x-tenant-id'] || url.searchParams.get('tenantId') || url.searchParams.get('tenant_id');
+    let tenantId;
+    if (requestedTid) {
+      tenantId = await validateTenantAccess(user, requestedTid, supabase);
+      if (!tenantId) return json(res, 403, { error: 'Acesso negado ao tenant' }, req);
+    } else {
+      tenantId = await getDefaultTenantForUser(user, supabase);
+    }
+    if (!tenantId) return json(res, 403, { error: 'Tenant não identificado' }, req);
+    req.user = user;
+    req.tenantId = tenantId;
+    if (['POST', 'PUT', 'PATCH'].includes(req.method)) req.body = await parseBody(req);
+
+    const inboxLabelsMatch = pathname.match(/^\/api\/inbox\/labels\/([^/]+)$/);
+    const inboxGroupsMatch = pathname.match(/^\/api\/inbox\/groups\/([^/]+)$/);
+
+    if (pathname === '/api/inbox/instances' && req.method === 'GET')  return inboxRoutes.handleGetInstances(req, res, json, supabase);
+    if (pathname === '/api/inbox/chats'     && req.method === 'POST') return inboxRoutes.handleFindChats(req, res, json, supabase);
+    if (pathname === '/api/inbox/messages'  && req.method === 'POST') return inboxRoutes.handleFindMessages(req, res, json, supabase);
+    if (pathname === '/api/inbox/send'      && req.method === 'POST') return inboxRoutes.handleSendMessage(req, res, json, supabase);
+    if (pathname === '/api/inbox/markread'  && req.method === 'POST') return inboxRoutes.handleMarkRead(req, res, json, supabase);
+    if (pathname === '/api/inbox/react'     && req.method === 'POST') return inboxRoutes.handleReact(req, res, json, supabase);
+    if (pathname === '/api/inbox/lead'      && req.method === 'POST') return inboxRoutes.handleEditLead(req, res, json, supabase);
+    if (inboxLabelsMatch && req.method === 'GET') { req.params = { instanceKey: inboxLabelsMatch[1] }; return inboxRoutes.handleGetLabels(req, res, json, supabase); }
+    if (inboxGroupsMatch && req.method === 'GET') { req.params = { instanceKey: inboxGroupsMatch[1] }; return inboxRoutes.handleGetGroups(req, res, json, supabase); }
+    return json(res, 404, { error: 'Rota inbox não encontrada' }, req);
   }
 
   // ================================================================

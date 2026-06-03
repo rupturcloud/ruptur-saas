@@ -51,33 +51,34 @@ export function AuthProvider({ children }) {
       logger.debug('[Auth] Memberships encontradas', { count: memberships.length, memberships });
       let selectedMembership = memberships[0];
 
-      const { data: rupturTenant, error: rupturError } = await supabase
+      // Preferir ruptur-os (slug oficial) > ruptur-demo (legado) > primeiro disponível
+      const { data: rupturCandidates } = await supabase
         .from('tenants')
-        .select('id, name, created_at, updated_at')
-        .eq('name', 'Ruptur (PROD)')
-        .maybeSingle();
+        .select('id, slug, name, plan, status, created_at, updated_at')
+        .or('slug.eq.ruptur-os,name.eq.Ruptur (PROD)');
 
-      if (rupturError) {
-        logger.warn('[Auth] Erro ao buscar Ruptur tenant', rupturError, { userId });
+      let foundRuptur = null;
+      for (const candidate of (rupturCandidates || []).sort((a, b) =>
+        a.slug === 'ruptur-os' ? -1 : b.slug === 'ruptur-os' ? 1 : 0
+      )) {
+        const m = memberships.find(x => x.tenant_id === candidate.id);
+        if (m) { foundRuptur = { tenant: candidate, membership: m }; break; }
       }
 
-      if (rupturTenant) {
-        const rupturMembership = memberships.find(m => m.tenant_id === rupturTenant.id);
-        if (rupturMembership) {
-          selectedMembership = { ...rupturMembership, tenantData: rupturTenant };
-          logger.info('[Auth] Ruptur tenant encontrado e selecionado', { tenantId: rupturTenant.id });
-        } else if (!selectedMembership.tenantData) {
-          const { data: tenantData, error: tenantError } = await supabase
-            .from('tenants')
-            .select('id, name, created_at, updated_at')
-            .eq('id', selectedMembership.tenant_id)
-            .maybeSingle();
+      if (foundRuptur) {
+        selectedMembership = { ...foundRuptur.membership, tenantData: foundRuptur.tenant };
+        logger.info('[Auth] Tenant Ruptur selecionado', { slug: foundRuptur.tenant.slug, tenantId: foundRuptur.tenant.id });
+      } else if (!selectedMembership.tenantData) {
+        const { data: tenantData, error: tenantError } = await supabase
+          .from('tenants')
+          .select('id, slug, name, plan, status, created_at, updated_at')
+          .eq('id', selectedMembership.tenant_id)
+          .maybeSingle();
 
-          if (tenantError) {
-            logger.warn('[Auth] Erro ao buscar tenant data', tenantError, { tenantId: selectedMembership.tenant_id });
-          }
-          selectedMembership.tenantData = tenantData;
+        if (tenantError) {
+          logger.warn('[Auth] Erro ao buscar tenant data', tenantError, { tenantId: selectedMembership.tenant_id });
         }
+        selectedMembership.tenantData = tenantData;
       }
 
       if (selectedMembership.tenantData) {
