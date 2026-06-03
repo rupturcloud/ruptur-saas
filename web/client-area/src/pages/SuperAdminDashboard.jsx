@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, Plus, Mail, Trash2, X, CheckCircle2, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import EnvironmentSwitcher from '../components/EnvironmentSwitcher';
 
-const SuperAdminDashboard = ({ onLogout }) => {
-  const { session, signOut } = useAuth();
+const SuperAdminDashboard = () => {
+  const { session } = useAuth();
   const [admins, setAdmins] = useState([]);
   const [invites, setInvites] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -110,40 +109,18 @@ const SuperAdminDashboard = ({ onLogout }) => {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', color: 'white', fontFamily: 'Inter, sans-serif', padding: '40px 20px' }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ color: '#fff', fontFamily: 'Inter, sans-serif', background: '#0E1116', margin: '-22px -24px -40px', padding: '24px 28px 40px', minHeight: 'calc(100vh - 56px)' }}>
+      <div>
         {/* Header */}
-        <div style={{ marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1 style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Shield size={32} style={{ color: '#FF6A3D' }} />
-              Gerenciamento de Superadmin
-            </h1>
-            <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: 0 }}>
-              Configure e gerencie superadministradores da plataforma Ruptur
-            </p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <EnvironmentSwitcher variant="light" />
-            <button
-              onClick={onLogout || signOut}
-              style={{
-                padding: '10px 20px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255,68,102,0.2)',
-                background: 'rgba(255,68,102,0.05)',
-                color: '#ff6680',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: '0.15s',
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,68,102,0.12)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,68,102,0.05)'}
-            >
-              Sair
-            </button>
-          </div>
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ fontSize: 12, color: '#9AA2AE', marginBottom: 4 }}>Ruptur OS · Plataforma</div>
+          <h1 style={{ fontSize: '1.4rem', fontWeight: '800', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '10px', letterSpacing: '-.02em' }}>
+            <Shield size={22} style={{ color: '#FF6A3D' }} />
+            Gerenciamento de Superadmin
+          </h1>
+          <p style={{ fontSize: '13px', color: '#9AA2AE', margin: 0 }}>
+            Configure e gerencie superadministradores da plataforma Ruptur
+          </p>
         </div>
 
         {/* Tabs */}

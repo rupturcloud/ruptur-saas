@@ -96,6 +96,11 @@ function App() {
                 <Route path="inbox"       element={<InboxV2 />} />
                 <Route path="integracoes" element={<IntegrationsV2 />} />
                 <Route path="billing"     element={<BillingV2 />} />
+                {/* Administração da plataforma — dentro do AppShell laranja, só platform admin */}
+                <Route element={<ProtectedRoute requirePlatformAdmin />}>
+                  <Route path="plataforma"            element={<AdminDashboard />} />
+                  <Route path="plataforma/superadmin" element={<SuperAdminDashboard />} />
+                </Route>
                 {V0_STUBS.map(id => (
                   <Route key={id} path={id} element={<PlaceholderV2 name={id} />} />
                 ))}
@@ -103,11 +108,9 @@ function App() {
               </Route>
             </Route>
 
-            {/* Admin plataforma */}
-            <Route element={<ProtectedRoute requirePlatformAdmin />}>
-              <Route path="/admin"            element={<AdminDashboard />} />
-              <Route path="/admin/superadmin" element={<SuperAdminDashboard />} />
-            </Route>
+            {/* Aliases legados → redirecionam para o /v0 */}
+            <Route path="/admin"            element={<Navigate to="/v0/plataforma" replace />} />
+            <Route path="/admin/superadmin" element={<Navigate to="/v0/plataforma/superadmin" replace />} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -210,13 +210,15 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
             {collapsed && <div style={{ height: 8 }} />}
             <nav>
               {[
-                { to: '/admin', label: 'Painel Admin', icon: 'settings' },
-                { to: '/admin/superadmin', label: 'Super Admin', icon: 'shield' },
+                { to: '/v0/plataforma', label: 'Painel Admin', icon: 'settings' },
+                { to: '/v0/plataforma/superadmin', label: 'Super Admin', icon: 'shield' },
               ].map(it => (
-                <a
+                <NavLink
                   key={it.to}
-                  href={it.to}
+                  to={it.to}
+                  end
                   title={collapsed ? it.label : undefined}
+                  className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}
                   style={{
                     display: 'flex', alignItems: 'center',
                     gap: collapsed ? 0 : 9,
@@ -229,7 +231,7 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
                 >
                   <Icon name={it.icon} size={15} />
                   {!collapsed && <span style={{ flex: 1 }}>{it.label}</span>}
-                </a>
+                </NavLink>
               ))}
             </nav>
           </div>
