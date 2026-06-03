@@ -12,7 +12,7 @@
  */
 
 // Versão do SW (increment para force update e limpar cache antigo)
-const SW_VERSION = "2.2.0-ruptur-os";
+const SW_VERSION = "2.3.0-ruptur-os";
 const CACHE_NAME = `ruptur-os-${SW_VERSION}`;
 
 console.log(`✓ Service Worker v${SW_VERSION} loaded`);
