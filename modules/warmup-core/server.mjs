@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 
 // Import new modules
 import { inboxManager } from '../inbox/index.js';
-import { campaignManager } from '../campaigns/index.js';
+import { createCampaignManager } from '../campaigns/index.js';
 import { createWalletManager, getWalletManager } from '../wallet/index.js';
 import { requireAuth, requireTenant, parseBody, supabase } from '../auth/index.js';
 import { parseBodyWithValidation, WalletSchemas, InboxSchemas } from '../../middleware/validation.mjs';
@@ -19,6 +19,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import * as bubbleRoutes from '../../api/routes-bubble.mjs';
 
 const walletManager = createWalletManager(supabase);
+const campaignManager = createCampaignManager(supabase);
 const pubSubClient = getPubSubClient();
 
 // Web Push (Fase 7) — usa service role key pra bypass RLS no cleanup automático
