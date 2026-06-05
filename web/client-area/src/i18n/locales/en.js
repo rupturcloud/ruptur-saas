@@ -252,6 +252,13 @@ export const en = {
       tabInvites: 'Pending Invites',
       remove: 'Remove superadmin',
     },
+    account: {
+      prefsTitle: 'Preferences',
+      language: 'Default language',
+      languageHint: 'Sets your account language across all devices.',
+      saved: 'Language saved to your account',
+      saveError: 'Error saving. Try again.',
+    },
   },
 };
 

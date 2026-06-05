@@ -252,6 +252,13 @@ export const es = {
       tabInvites: 'Invitaciones Pendientes',
       remove: 'Quitar superadmin',
     },
+    account: {
+      prefsTitle: 'Preferencias',
+      language: 'Idioma predeterminado',
+      languageHint: 'Define el idioma de tu cuenta en todos los dispositivos.',
+      saved: 'Idioma guardado en tu cuenta',
+      saveError: 'Error al guardar. Inténtalo de nuevo.',
+    },
   },
 };
 

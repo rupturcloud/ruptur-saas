@@ -13,7 +13,8 @@ import {
   PageHeader, Button, Modal, Input, Icon,
 } from '../../ds/index.js';
 import { useToast } from '../../ds/toast.js';
-import { useT } from '../../i18n/index.jsx';
+import { useT, useI18n } from '../../i18n/index.jsx';
+import { supabase } from '../../services/supabase';
 import { providerApi } from '../../api/admin.api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 
@@ -1107,6 +1108,64 @@ function WebhooksTab() {
 
 // ─── Aba genérica: Placeholder ────────────────────────────────────────────────
 
+// Aba Conta — preferências do usuário (idioma padrão persistido na conta)
+function AccountTab() {
+  const tr = useT();
+  const { lang, setLang, supported } = useI18n();
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  const NAMES = { pt: '🇧🇷 Português', en: '🇺🇸 English', es: '🇪🇸 Español' };
+
+  const notify = (msg) => {
+    try {
+      if (toast?.push) toast.push(msg);
+      else if (typeof toast === 'function') toast(msg);
+    } catch { /* noop */ }
+  };
+
+  const changeLanguage = async (l) => {
+    setLang(l); // aplica na hora
+    setSaving(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { preferred_language: l } });
+      if (error) throw error;
+      notify(tr('app.account.saved'));
+    } catch {
+      notify(tr('app.account.saveError'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ maxWidth: 480 }}>
+      <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>{tr('app.account.prefsTitle')}</h3>
+      <div style={{ padding: 18, border: '1px solid var(--ink-150, rgba(127,127,127,.18))', borderRadius: 14, background: 'var(--ink-25, rgba(127,127,127,.04))' }}>
+        <label htmlFor="acc-lang" style={{ display: 'block', fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>
+          {tr('app.account.language')}
+        </label>
+        <div style={{ fontSize: 12.5, color: 'var(--ink-500, #9aa3b2)', marginBottom: 12 }}>
+          {tr('app.account.languageHint')}
+        </div>
+        <select
+          id="acc-lang"
+          value={lang}
+          onChange={(e) => changeLanguage(e.target.value)}
+          disabled={saving}
+          style={{
+            width: '100%', maxWidth: 260, padding: '10px 12px', borderRadius: 10,
+            border: '1px solid var(--ink-200, rgba(127,127,127,.3))',
+            background: 'var(--ink-0, #fff)', color: 'var(--ink-900, #111)',
+            fontSize: 14, fontFamily: 'inherit', cursor: saving ? 'wait' : 'pointer',
+          }}
+        >
+          {supported.map((l) => <option key={l} value={l}>{NAMES[l]}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 function ComingSoonTab({ label }) {
   const tr = useT();
   return (
@@ -1123,7 +1182,7 @@ function ComingSoonTab({ label }) {
 const TABS = [
   { id: 'users',       label: 'Usuários e papéis', component: UsersTab },
   { id: 'workspace',   label: 'Workspace',          component: () => <ComingSoonTab label="Workspace" /> },
-  { id: 'conta',       label: 'Conta',              component: () => <ComingSoonTab label="Conta" /> },
+  { id: 'conta',       label: 'Conta',              component: AccountTab },
   { id: 'billing',     label: 'Cobrança',           component: () => <ComingSoonTab label="Cobrança" /> },
   { id: 'notifs',      label: 'Notificações',       component: () => <ComingSoonTab label="Notificações" /> },
   { id: 'lgpd',        label: 'Privacidade & LGPD', component: () => <ComingSoonTab label="Privacidade & LGPD" /> },

@@ -11,6 +11,7 @@ import { ToastProvider as RupturToastProvider } from './ds/index.js';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './contexts/AuthContext';
 import { InboxBadgeProvider } from './contexts/InboxBadgeContext.jsx';
+import LanguagePreferenceSync from './components/LanguagePreferenceSync.jsx';
 
 // Público
 import LoginScreen from './pages/LoginScreen';
@@ -79,6 +80,7 @@ function App() {
     <RupturToastProvider>
       <InboxBadgeProvider>
       <BrowserRouter>
+        <LanguagePreferenceSync />
         <Suspense fallback={<LoadingScreen />}>
           <Routes>
             <Route path="/"       element={<RootRedirect />} />
