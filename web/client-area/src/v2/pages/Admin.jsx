@@ -1723,6 +1723,85 @@ function ContaTab() {
   );
 }
 
+// ─── Aba: Notificações (preferências via user_metadata) ───────────────────────
+
+const NOTIF_GROUPS = [
+  {
+    group: 'E-mail', items: [
+      { key: 'email_campaigns', label: 'Campanhas concluídas', desc: 'Resumo quando uma campanha termina' },
+      { key: 'email_system', label: 'Alertas de sistema', desc: 'Instância caiu, risco de bloqueio' },
+      { key: 'email_billing', label: 'Cobrança e créditos', desc: 'Créditos baixos, faturas, pagamentos' },
+      { key: 'email_weekly', label: 'Resumo semanal', desc: 'Métricas da semana por e-mail' },
+    ],
+  },
+  {
+    group: 'Push (navegador)', items: [
+      { key: 'push_inbox', label: 'Novas mensagens', desc: 'Notificação ao receber mensagem no inbox' },
+      { key: 'push_instances', label: 'Status de instâncias', desc: 'Quando um número conecta/desconecta' },
+    ],
+  },
+];
+const DEFAULT_PREFS = { email_campaigns: true, email_system: true, email_billing: true, email_weekly: false, push_inbox: true, push_instances: true };
+
+function NotifToggle({ checked, onChange }) {
+  return (
+    <button onClick={onChange} aria-pressed={checked} style={{ width: 40, height: 22, borderRadius: 999, border: 'none', cursor: 'pointer', padding: 2, background: checked ? 'var(--brand-500)' : 'var(--ink-200)', transition: 'background .15s', flexShrink: 0 }}>
+      <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', transform: checked ? 'translateX(18px)' : 'translateX(0)', transition: 'transform .15s' }} />
+    </button>
+  );
+}
+
+function NotificacoesTab() {
+  const { user } = useAuth();
+  const [prefs, setPrefs] = useState(DEFAULT_PREFS);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    const saved = user?.user_metadata?.notification_prefs;
+    if (saved) setPrefs(p => ({ ...DEFAULT_PREFS, ...saved }));
+  }, [user?.id]);
+
+  const toggle = (key) => { setPrefs(p => ({ ...p, [key]: !p[key] })); setMsg(null); };
+
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { notification_prefs: prefs } });
+      if (error) throw error;
+      setMsg({ type: 'ok', text: 'Preferências de notificação salvas.' });
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ maxWidth: 600 }}>
+      {NOTIF_GROUPS.map(g => (
+        <div key={g.group} style={{ marginBottom: 22 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 10 }}>{g.group}</div>
+          <div style={{ border: '1px solid var(--ink-150)', borderRadius: 10, overflow: 'hidden' }}>
+            {g.items.map((it, i) => (
+              <div key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', borderTop: i > 0 ? '1px solid var(--ink-100)' : 'none' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--ink-900)' }}>{it.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 2 }}>{it.desc}</div>
+                </div>
+                <NotifToggle checked={!!prefs[it.key]} onChange={() => toggle(it.key)} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {msg && <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, fontSize: 13, background: msg.type === 'ok' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)', color: msg.type === 'ok' ? '#16a34a' : '#dc2626', border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'}` }}>{msg.text}</div>}
+
+      <button onClick={save} disabled={saving} style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'var(--brand-500)', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+        {saving ? 'Salvando...' : 'Salvar preferências'}
+      </button>
+    </div>
+  );
+}
+
 // ─── Aba genérica: Placeholder ────────────────────────────────────────────────
 
 function ComingSoonTab({ label }) {
@@ -1742,7 +1821,7 @@ const TABS = [
   { id: 'workspace',   label: 'Workspace',          component: WorkspaceTab },
   { id: 'conta',       label: 'Conta',              component: ContaTab },
   { id: 'billing',     label: 'Cobrança',           component: BillingTab },
-  { id: 'notifs',      label: 'Notificações',       component: () => <ComingSoonTab label="Notificações" /> },
+  { id: 'notifs',      label: 'Notificações',       component: NotificacoesTab },
   { id: 'lgpd',        label: 'Privacidade & LGPD', component: () => <ComingSoonTab label="Privacidade & LGPD" /> },
   { id: 'conectores',  label: 'Conectores',         component: ConnectorsTab },
   { id: 'permissions', label: 'Permissões',         component: PermissionsTab },
