@@ -22,8 +22,7 @@
 import UaZAPIClient from '../../integrations/uazapi/client.js';
 import { inboxManager } from '../inbox/index.js';
 import { getWalletManager } from '../wallet/index.js';
-
-const uazapiClient = new UaZAPIClient();
+import { decryptSecret } from '../providers/uazapi-account.service.js';
 
 // ---------------------------------------------------------------------------
 //  Mapeamento de status domínio ↔ banco
@@ -66,6 +65,43 @@ export class CampaignManager {
     this.activeCampaigns = new Map(); // id -> campanha em envio
     this.sendingQueue = [];           // fila in-memory de envio (ITEM A3: Bull)
     this.isProcessing = false;
+    this._schedulerTimer = null;
+    this.startScheduler();
+  }
+
+  /**
+   * Scheduler de campanhas AGENDADAS (status 'scheduled' com scheduled_at <= agora).
+   * Tick leve a cada 60s — substitui o mock que só logava. Auto-contido (não depende
+   * de Bull/Redis nem de mudança no gateway). O CampaignManager é singleton.
+   */
+  startScheduler() {
+    if (this._schedulerTimer) return;
+    const TICK_MS = 60 * 1000;
+    this._schedulerTimer = setInterval(() => {
+      this.processScheduledCampaigns().catch((e) => console.error('[Campaigns] scheduler tick falhou:', e && e.message));
+    }, TICK_MS);
+    if (this._schedulerTimer.unref) this._schedulerTimer.unref();
+    console.log('[Campaigns] scheduler de campanhas agendadas ativo (tick 60s)');
+  }
+
+  /** Busca campanhas agendadas cujo horário chegou e dispara cada uma (launchCampaign). */
+  async processScheduledCampaigns() {
+    const nowIso = new Date().toISOString();
+    const { data: due, error } = await this.supabase
+      .from('campaigns')
+      .select('id, name')
+      .eq('status', 'scheduled')
+      .lte('scheduled_at', nowIso)
+      .limit(20);
+    if (error) { console.error('[Campaigns] processScheduledCampaigns:', error.message); return; }
+    for (const c of (due || [])) {
+      try {
+        console.log('[Campaigns] disparando campanha agendada', c.id, c.name || '');
+        await this.launchCampaign(c.id);
+      } catch (e) {
+        console.error('[Campaigns] falha ao disparar agendada', c.id, e && e.message);
+      }
+    }
   }
 
   // =========================================================================
@@ -464,15 +500,17 @@ export class CampaignManager {
       throw new Error(`Credit deduction failed: ${walletError.message}`);
     }
 
-    // 2. Envio conforme tipo.
+    // 2. Envio conforme tipo. Client resolvido com o SERVIDOR correto da instância
+    //    (cada instância pode estar num servidor UAZAPI distinto).
     let result;
     const liveBeforeSend = this.activeCampaigns.get(campaign.id);
     if (!liveBeforeSend || liveBeforeSend.status !== 'active') {
       throw new Error(`Campanha ${campaign.id} foi pausada/parada antes do envio`);
     }
+    const client = this._clientFor(senderInstance);
 
     if (mediaType !== 'text') {
-      result = await uazapiClient.sendMedia(senderInstance.token || senderInstance.id, {
+      result = await client.sendMedia(senderInstance.token, {
         number: recipient.phone,
         type: mediaType,
         file: mediaUrl,
@@ -481,7 +519,7 @@ export class CampaignManager {
         replyid: recipient.replyTo,
       });
     } else if (recipient.menuType && (recipient.buttons || recipient.sections)) {
-      result = await uazapiClient.sendMenu(senderInstance.token || senderInstance.id, {
+      result = await client.sendMenu(senderInstance.token, {
         number: recipient.phone,
         type: recipient.menuType,
         text: messageText,
@@ -491,7 +529,7 @@ export class CampaignManager {
         replyid: recipient.replyTo,
       });
     } else if (recipient.latitude && recipient.longitude) {
-      result = await uazapiClient.sendLocationButton(senderInstance.token || senderInstance.id, {
+      result = await client.sendLocationButton(senderInstance.token, {
         number: recipient.phone,
         latitude: recipient.latitude,
         longitude: recipient.longitude,
@@ -500,7 +538,7 @@ export class CampaignManager {
         replyid: recipient.replyTo,
       });
     } else {
-      result = await uazapiClient.sendText(senderInstance.token || senderInstance.id, {
+      result = await client.sendText(senderInstance.token, {
         number: recipient.phone,
         text: messageText,
         replyid: recipient.replyTo,
@@ -550,22 +588,68 @@ export class CampaignManager {
     return message;
   }
 
+  /**
+   * Instâncias de envio resolvidas pelo instance_registry (fonte de verdade):
+   * token = remote_instance_id, server_url + adminToken do provider_account.
+   * Antes vinha do inboxManager (memória/Bubble) sem token/servidor reais.
+   */
   async getSenderInstances(campaign) {
     try {
-      if (campaign.sender.type === 'specific') {
-        const instances = [];
-        for (const instanceId of campaign.sender.instanceIds) {
-          const instance = await uazapiClient.getInstance(instanceId);
-          if (instance && instance.connected) instances.push(instance);
-        }
-        return instances;
+      const { data: tps } = await this.supabase
+        .from('tenant_providers')
+        .select('id')
+        .eq('tenant_id', campaign.tenantId);
+      const tpIds = (tps || []).map((t) => t.id);
+      if (!tpIds.length) return [];
+
+      const { data: insts } = await this.supabase
+        .from('instance_registry')
+        .select('id, remote_instance_id, instance_name, provider_account_id, status')
+        .in('tenant_provider_id', tpIds)
+        .eq('status', 'connected');
+      if (!insts || !insts.length) return [];
+
+      // Filtro opcional por instâncias específicas da campanha
+      let chosen = insts;
+      if (campaign.sender?.type === 'specific' && Array.isArray(campaign.sender.instanceIds) && campaign.sender.instanceIds.length) {
+        const want = new Set(campaign.sender.instanceIds.map(String));
+        chosen = insts.filter((i) => want.has(String(i.id)) || want.has(String(i.remote_instance_id)));
       }
-      const inboxSummary = await inboxManager.getInboxSummary(campaign.tenantId);
-      return (inboxSummary.instances || []).filter((i) => i.connected).slice(0, 10);
+      if (!chosen.length) return [];
+
+      // server_url + adminToken por provider_account
+      const accIds = [...new Set(chosen.map((i) => i.provider_account_id).filter(Boolean))];
+      const { data: accs } = await this.supabase
+        .from('provider_accounts')
+        .select('id, server_url, admin_token_enc')
+        .in('id', accIds);
+      const accById = Object.fromEntries((accs || []).map((a) => [a.id, a]));
+
+      return chosen.slice(0, 10).map((i) => {
+        const acc = accById[i.provider_account_id] || {};
+        return {
+          id: i.id,
+          name: i.instance_name,
+          token: i.remote_instance_id,
+          serverUrl: acc.server_url || 'https://free.uazapi.com',
+          adminToken: acc.admin_token_enc ? decryptSecret(acc.admin_token_enc) : null,
+          connected: true,
+        };
+      });
     } catch (error) {
       console.error('[Campaigns] Erro ao obter instâncias de envio:', error.message);
       return [];
     }
+  }
+
+  /** Cache de UaZAPIClient por servidor (cada instância pode estar num server distinto). */
+  _clientFor(senderInstance) {
+    if (!this._clientCache) this._clientCache = new Map();
+    const key = (senderInstance.serverUrl || '') + '|' + (senderInstance.adminToken || '');
+    if (!this._clientCache.has(key)) {
+      this._clientCache.set(key, new UaZAPIClient({ serverUrl: senderInstance.serverUrl, adminToken: senderInstance.adminToken }));
+    }
+    return this._clientCache.get(key);
   }
 
   /** Processa CSV e persiste destinatários numa campanha existente. */

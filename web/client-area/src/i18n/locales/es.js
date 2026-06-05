@@ -220,6 +220,8 @@ export const es = {
       emptyMine: 'Ninguna conversación asignada a ti.',
       emptyUnassigned: 'Ninguna conversación sin agente.',
       emptyNoInstance: 'Conecta un número en Números.',
+      emptyNoWorkspaceInstance: 'Ninguna instancia en este workspace. Cambia de workspace arriba o conecta un número en Números.',
+      emptySelectInstance: 'Selecciona una instancia arriba.',
       emptyWaiting: 'Ninguna conversación todavía. Esperando mensajes…',
       contactDetails: 'Detalles del contacto',
       send: 'Enviar',

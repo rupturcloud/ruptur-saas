@@ -110,6 +110,57 @@ O worktree `fervent-bardeen-ee722e` foi **mergeado para o master em 2026-06-02**
 
 **Violação = layout azul em produção. Regressão crítica.**
 
+### 7. Telas de autenticação (login/signup) — SEMPRE V0 laranja
+
+`web/client-area/src/pages/LoginScreen.jsx` e `SignUp.jsx` usam o design V0
+laranja **split-screen** (painel de branding à esquerda + form à direita),
+paleta `#FF6A3D` / `#0E1116`.
+
+**PROIBIDO voltar ao design antigo.** Marcadores de regressão (se aparecerem,
+alguém reverteu): orbs flutuantes (`.orb-1/2/3`), glassmorphism
+(`backdrop-filter:blur`), fundo `#06060e`/`#0a0a14`, logo `RUPTURCLOUD`, ou
+`framer-motion` nessas telas.
+
+- Classe-âncora do design CORRETO: **`v0-login__brand`**.
+- Login navega para **`/v0/dashboard`** (NÃO `/dashboard`, que não existe).
+- Lógica Supabase (`signIn`/`signUp`, `?next`, erros pt-BR) é intocável.
+
+### 8. Build exige Node 20+ (Vite)
+
+O Vite atual quebra em Node 18 (`CustomEvent is not defined` / `Vite requires
+Node 20.19+`). Use Node 20 via nvm:
+```bash
+export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh" --no-use
+cd web/client-area && nvm exec v20.19.3 npm run build
+```
+O lint local (`eslint`) também quebra em Node 18 (`util.styleText is not a
+function`) — não é bug do código; rode lint/build com Node 20.
+
+### 9. ⚠️ Deploy concorrente — UM agente por vez + build isolado
+
+`dist-client/` é **compartilhado** por todos os worktrees/agentes. Builds
+simultâneos **colidem**: um agente sobrescreve o bundle do outro no mesmo
+diretório, e prod acaba servindo um hash sem as suas mudanças.
+
+**Sintoma real (já aconteceu):** você deploya, valida o hash, mas minutos
+depois prod serve outro `index-*.js` sem o seu trabalho (outro agente
+rebuildou por cima).
+
+**Regra:**
+1. Só **um agente** faz deploy de frontend por vez. Combine antes.
+2. Para deploy à prova de colisão, **build isolado** em diretório próprio:
+   ```bash
+   nvm exec v20.19.3 npx vite build --outDir /tmp/meu-build --emptyOutDir
+   ```
+   Depois empacote e `docker cp` SÓ desse `/tmp/meu-build`, nunca do
+   `dist-client/` compartilhado.
+3. **Valide o CONTEÚDO, não só o hash** — baixe o JS de prod e confirme suas
+   classes/strings (o `LC_ALL=C grep -a` evita erro de Unicode no minificado):
+   ```bash
+   JS=$(curl -s https://ruptur.cloud/ | grep -oaE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1)
+   curl -s "https://ruptur.cloud/$JS" | LC_ALL=C grep -c -a "v0-login__brand"  # >0 = ok
+   ```
+
 ---
 
 Se estiver tratando erro em produção, sempre informar:

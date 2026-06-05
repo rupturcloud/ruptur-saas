@@ -220,6 +220,8 @@ export const pt = {
       emptyMine: 'Nenhuma conversa atribuída a você.',
       emptyUnassigned: 'Nenhuma conversa sem atendente.',
       emptyNoInstance: 'Conecte um número em Números.',
+      emptyNoWorkspaceInstance: 'Nenhuma instância neste workspace. Troque de workspace no topo ou conecte um número em Números.',
+      emptySelectInstance: 'Selecione uma instância acima.',
       emptyWaiting: 'Nenhuma conversa ainda. Aguardando mensagens…',
       contactDetails: 'Detalhes do contato',
       send: 'Enviar',
