@@ -11,6 +11,7 @@ import {
 } from '../../ds/index.js';
 import { useToast } from '../../ds/toast.js';
 import { whatsappApi } from '../../api/whatsapp.api.js';
+import { useT } from '../../i18n/index.jsx';
 
 // ---------------------------------------------------------------------------
 // Constantes / dados estáticos
@@ -409,6 +410,7 @@ function InstCard({ inst, busy, onStart, onStop }) {
 // Aquecimento — componente principal
 // ---------------------------------------------------------------------------
 export default function Aquecimento() {
+  const t = useT();
   const [instances, setInstances] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -472,11 +474,11 @@ export default function Aquecimento() {
       <style>{STYLES}</style>
 
       <PageHeader
-        title="Aquecimento"
-        sub="Saude dos numeros WhatsApp e protecao anti-ban automatica"
+        title={t('app.aquecimento.title')}
+        sub={t('app.aquecimento.sub')}
         actions={
           <Button variant="secondary" size="sm" onClick={loadNumbers}>
-            Atualizar
+            {t('app.aquecimento.refresh')}
           </Button>
         }
       />
@@ -484,41 +486,41 @@ export default function Aquecimento() {
       {/* Stats bar */}
       <div className="aq-stats">
         <div className="aq-stat">
-          <div className="l">Conectados</div>
+          <div className="l">{t('app.aquecimento.statConnected')}</div>
           <div className="v">{loading ? '…' : connected.length}</div>
-          <div className="s">numeros ativos</div>
+          <div className="s">{t('app.aquecimento.statConnectedSub')}</div>
         </div>
         <div className="aq-stat">
-          <div className="l">Aquecendo agora</div>
+          <div className="l">{t('app.aquecimento.statWarming')}</div>
           <div className="v" style={{ color: warmingNow.length > 0 ? 'var(--brand-500)' : undefined }}>
             {loading ? '…' : warmingNow.length}
           </div>
-          <div className="s">em progresso</div>
+          <div className="s">{t('app.aquecimento.statWarmingSub')}</div>
         </div>
         <div className="aq-stat">
-          <div className="l">Prontos</div>
+          <div className="l">{t('app.aquecimento.statReady')}</div>
           <div className="v" style={{ color: ready.length > 0 ? '#25D366' : undefined }}>
             {loading ? '…' : ready.length}
           </div>
-          <div className="s">para disparo</div>
+          <div className="s">{t('app.aquecimento.statReadySub')}</div>
         </div>
         <div className="aq-stat">
-          <div className="l">Score medio</div>
+          <div className="l">{t('app.aquecimento.statScore')}</div>
           <div className="v" style={{ color: avgScore >= 80 ? '#25D366' : avgScore >= 50 ? 'var(--brand-500)' : undefined }}>
             {loading ? '…' : avgScore}
           </div>
-          <div className="s">de 100</div>
+          <div className="s">{t('app.aquecimento.statScoreSub')}</div>
         </div>
       </div>
 
       {/* Estado de loading / erro */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: 48, color: 'var(--ink-400)' }}>Carregando numeros…</div>
+        <div style={{ textAlign: 'center', padding: 48, color: 'var(--ink-400)' }}>{t('app.aquecimento.loading')}</div>
       )}
       {!loading && error && (
         <div style={{ textAlign: 'center', padding: 40 }}>
           <p style={{ color: 'var(--danger,#DC2626)', marginBottom: 12 }}>{error}</p>
-          <Button variant="secondary" size="sm" onClick={loadNumbers}>Tentar novamente</Button>
+          <Button variant="secondary" size="sm" onClick={loadNumbers}>{t('app.aquecimento.retry')}</Button>
         </div>
       )}
 
@@ -528,7 +530,7 @@ export default function Aquecimento() {
           <div>
             <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
               <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>
-                Numeros em aquecimento
+                {t('app.aquecimento.sectionWarming')}
               </h3>
               {ready.length > 0 && (
                 <span style={{ fontSize: 11, fontWeight: 600, color: '#25D366', background: '#DCFCE7', padding: '2px 8px', borderRadius: 999 }}>
@@ -540,11 +542,11 @@ export default function Aquecimento() {
             {connected.length === 0 ? (
               <EmptyState
                 icon="phone"
-                title="Nenhum numero conectado"
-                text="Conecte uma instancia WhatsApp primeiro para iniciar o aquecimento."
+                title={t('app.aquecimento.emptyTitle')}
+                text={t('app.aquecimento.emptyText')}
                 action={
                   <Button variant="primary" onClick={() => { window.location.href = '/v0/numbers'; }}>
-                    Ir para Numeros
+                    {t('app.aquecimento.goNumbers')}
                   </Button>
                 }
               />
