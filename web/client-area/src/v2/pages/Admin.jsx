@@ -1511,6 +1511,127 @@ function PermissionsTab() {
   );
 }
 
+// ─── Aba: Cobrança (billing + créditos + audit) ───────────────────────────────
+
+function BillCard({ label, value, accent }) {
+  return (
+    <div style={{ padding: '14px 16px', borderRadius: 10, background: 'var(--ink-0)', border: '1px solid var(--ink-150)' }}>
+      <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: accent ? 'var(--brand-600)' : 'var(--ink-900)' }}>{value}</div>
+    </div>
+  );
+}
+
+function BillingTab() {
+  const { session, tenant, isPlatformAdmin } = useAuth();
+  const h = { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' };
+
+  const [allTenants, setAllTenants] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [billing, setBilling] = useState(null);
+  const [audit, setAudit] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [creditAmount, setCreditAmount] = useState('');
+  const [creditDesc, setCreditDesc] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => { if (tenant?.id) setSelectedId(p => p || tenant.id); }, [tenant?.id]);
+  useEffect(() => {
+    if (!isPlatformAdmin || !session?.access_token) return;
+    fetch('/api/admin/platform/tenants', { headers: h }).then(r => r.ok ? r.json() : { tenants: [] }).then(d => setAllTenants(d.tenants || []));
+  }, [isPlatformAdmin, session?.access_token]);
+  useEffect(() => { if (!selectedId && allTenants.length > 0) setSelectedId(allTenants[0].id); }, [selectedId, allTenants]);
+
+  const load = useCallback(() => {
+    if (!selectedId || !session?.access_token) return;
+    setLoading(true); setMsg(null);
+    Promise.all([
+      fetch(`/api/admin/tenants/${selectedId}/billing`, { headers: h }).then(r => r.ok ? r.json() : null),
+      fetch(`/api/admin/tenants/${selectedId}/audit?limit=20`, { headers: h }).then(r => r.ok ? r.json() : { logs: [] }),
+    ]).then(([b, a]) => { setBilling(b?.data || null); setAudit(a?.logs || []); })
+      .catch(e => setMsg({ type: 'err', text: e.message }))
+      .finally(() => setLoading(false));
+  }, [selectedId, session?.access_token]);
+  useEffect(() => { load(); }, [load]);
+
+  const addCredits = async () => {
+    const amount = Number(creditAmount);
+    if (!Number.isFinite(amount) || amount <= 0) { setMsg({ type: 'err', text: 'Quantidade de créditos deve ser positiva' }); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const res = await fetch('/api/admin/credits', { method: 'POST', headers: h, body: JSON.stringify({ tenantId: selectedId, amount, description: creditDesc.trim() || 'Crédito administrativo' }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
+      setMsg({ type: 'ok', text: `+${amount} créditos adicionados.` });
+      setCreditAmount(''); setCreditDesc('');
+      load();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div>
+      {isPlatformAdmin && allTenants.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+          {allTenants.map(t => (
+            <button key={t.id} onClick={() => setSelectedId(t.id)} style={{ padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: selectedId === t.id ? 'var(--brand-500)' : 'var(--ink-100)', color: selectedId === t.id ? '#fff' : 'var(--ink-600)', border: `1px solid ${selectedId === t.id ? 'var(--brand-500)' : 'var(--ink-200)'}` }}>{t.name || t.slug}</button>
+          ))}
+        </div>
+      )}
+
+      {loading && <div style={{ padding: 24, color: 'var(--ink-400)' }}>Carregando cobrança...</div>}
+
+      {!loading && billing && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginBottom: 20 }}>
+            <BillCard label="Plano" value={billing.plan || '—'} />
+            <BillCard label="Saldo de créditos" value={Number(billing.creditsBalance || 0).toLocaleString('pt-BR')} accent />
+            <BillCard label="Créditos mensais" value={Number(billing.monthlyCredits || 0).toLocaleString('pt-BR')} />
+            <BillCard label="Trial" value={billing.trialEndsAt ? (billing.isExpired ? 'Expirado' : new Date(billing.trialEndsAt).toLocaleDateString('pt-BR')) : '—'} />
+          </div>
+
+          {isPlatformAdmin && (
+            <div style={{ padding: 14, marginBottom: 20, borderRadius: 10, background: 'var(--ink-50)', border: '1px solid var(--ink-150)' }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-800)', marginBottom: 10 }}>Adicionar créditos manualmente</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div style={{ width: 140 }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>Quantidade</label>
+                  <input type="number" min="1" value={creditAmount} onChange={e => setCreditAmount(e.target.value)} placeholder="100" style={wsInput} />
+                </div>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>Descrição (opcional)</label>
+                  <input value={creditDesc} onChange={e => setCreditDesc(e.target.value)} placeholder="Bônus, ajuste manual, etc." style={wsInput} />
+                </div>
+                <button onClick={addCredits} disabled={busy} style={{ padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--brand-500)', color: '#fff', fontSize: 13, fontWeight: 600, opacity: busy ? 0.6 : 1 }}>{busy ? '...' : 'Adicionar'}</button>
+              </div>
+            </div>
+          )}
+
+          {msg && <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, fontSize: 13, background: msg.type === 'ok' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)', color: msg.type === 'ok' ? '#16a34a' : '#dc2626', border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'}` }}>{msg.text}</div>}
+
+          <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 14, marginBottom: 10 }}>Histórico de atividade · {audit.length}</div>
+          <div style={{ border: '1px solid var(--ink-150)', borderRadius: 10, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <tbody>
+                {audit.length === 0 && <tr><td style={{ padding: 18, textAlign: 'center', color: 'var(--ink-400)' }}>Sem registros de auditoria.</td></tr>}
+                {audit.map((l, i) => (
+                  <tr key={l.id || i} style={{ borderTop: i > 0 ? '1px solid var(--ink-100)' : 'none' }}>
+                    <td style={{ padding: '9px 16px', color: 'var(--ink-700)' }}>{l.action || l.event || l.type || '—'}</td>
+                    <td style={{ padding: '9px 16px', color: 'var(--ink-400)', fontSize: 12, textAlign: 'right' }}>{l.created_at ? new Date(l.created_at).toLocaleString('pt-BR') : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {!loading && !billing && <div style={{ padding: 24, color: 'var(--ink-400)' }}>{msg?.text || 'Nenhum dado de cobrança disponível.'}</div>}
+    </div>
+  );
+}
+
 // ─── Aba genérica: Placeholder ────────────────────────────────────────────────
 
 function ComingSoonTab({ label }) {
@@ -1529,7 +1650,7 @@ const TABS = [
   { id: 'users',       label: 'Usuários e papéis', component: UsersTab },
   { id: 'workspace',   label: 'Workspace',          component: WorkspaceTab },
   { id: 'conta',       label: 'Conta',              component: () => <ComingSoonTab label="Conta" /> },
-  { id: 'billing',     label: 'Cobrança',           component: () => <ComingSoonTab label="Cobrança" /> },
+  { id: 'billing',     label: 'Cobrança',           component: BillingTab },
   { id: 'notifs',      label: 'Notificações',       component: () => <ComingSoonTab label="Notificações" /> },
   { id: 'lgpd',        label: 'Privacidade & LGPD', component: () => <ComingSoonTab label="Privacidade & LGPD" /> },
   { id: 'conectores',  label: 'Conectores',         component: ConnectorsTab },
