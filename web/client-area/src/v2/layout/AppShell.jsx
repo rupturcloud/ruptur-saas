@@ -6,10 +6,12 @@ import { useIdleTimer } from '../../hooks/useIdleTimer.js';
 import IdleWarningModal from '../../components/IdleWarningModal.jsx';
 import ForcePasswordChange from '../../components/ForcePasswordChange.jsx';
 import TenantSwitcher from './TenantSwitcher.jsx';
+import { useT } from '../../i18n/index.jsx';
+import LanguageSwitcher from '../../components/LanguageSwitcher.jsx';
 import { useInboxBadge } from '../../contexts/InboxBadgeContext.jsx';
 
 const NAV = [
-  { section: 'Operação', items: [
+  { section: 'Operação', key: 'operation', items: [
     { id: 'dashboard',   label: 'Cockpit',       icon: 'dashboard' },
     { id: 'inbox',       label: 'Inbox',         icon: 'wa' },
     { id: 'pipeline',    label: 'CRM',           icon: 'pipeline' },
@@ -22,14 +24,14 @@ const NAV = [
     { id: 'aquecimento', label: 'Aquecimento',   icon: 'fire' },
     { id: 'rede-coletiva', label: 'Rede Coletiva', icon: 'grid', badge: 'NOVO', badgeTone: 'brand' },
   ]},
-  { section: 'Receita', items: [
+  { section: 'Receita', key: 'revenue', items: [
     { id: 'business',   label: 'Business',   icon: 'note' },
     { id: 'billing',    label: 'Receita',    icon: 'billing' },
     { id: 'growth',     label: 'Growth OS',  icon: 'trendUp' },
     { id: 'indicacoes', label: 'Indicações', icon: 'star' },
     { id: 'insights',   label: 'Insights',   icon: 'sparkles' },
   ]},
-  { section: 'Sistema', items: [
+  { section: 'Sistema', key: 'system', items: [
     { id: 'integrations', label: 'Integrações',   icon: 'zap' },
     { id: 'webhooks',     label: 'Webhooks',      icon: 'zap' },
     { id: 'admin',        label: 'Configurações', icon: 'settings' },
@@ -39,6 +41,7 @@ const NAV = [
 function Sidebar({ collapsed, onToggle, onSignOut }) {
   const navigate = useNavigate();
   const { session, tenant, isPlatformAdmin } = useAuth();
+  const t = useT();
   const { unread } = useInboxBadge();
 
   const userName =
@@ -159,7 +162,7 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {g.section}
+                {t('app.sections.' + g.key)}
               </div>
             )}
             {collapsed && <div style={{ height: 8 }} />}
@@ -174,7 +177,7 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
                 <NavLink
                   key={it.id}
                   to={`/v0/${it.id}`}
-                  title={collapsed ? it.label : undefined}
+                  title={collapsed ? t('app.nav.' + it.id) : undefined}
                   className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}
                   style={{
                     display: 'flex',
@@ -194,7 +197,7 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
                   }}
                 >
                   <Icon name={it.icon} size={15} />
-                  {!collapsed && <span style={{ flex: 1 }}>{it.label}</span>}
+                  {!collapsed && <span style={{ flex: 1 }}>{t('app.nav.' + it.id)}</span>}
                   {!collapsed && badgeVal != null && (
                     <span className={`badge badge-${badgeTone}`}>{badgeVal}</span>
                   )}
@@ -214,20 +217,20 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
                 textTransform: 'uppercase', letterSpacing: '0.08em',
                 padding: '10px 14px 4px', whiteSpace: 'nowrap',
               }}>
-                Plataforma
+                {t('app.sections.platform')}
               </div>
             )}
             {collapsed && <div style={{ height: 8 }} />}
             <nav>
               {[
-                { to: '/v0/plataforma', label: 'Painel Admin', icon: 'settings' },
-                { to: '/v0/plataforma/superadmin', label: 'Super Admin', icon: 'shield' },
+                { to: '/v0/plataforma', id: 'plataforma', label: 'Painel Admin', icon: 'settings' },
+                { to: '/v0/plataforma/superadmin', id: 'superadmin', label: 'Super Admin', icon: 'shield' },
               ].map(it => (
                 <NavLink
                   key={it.to}
                   to={it.to}
                   end
-                  title={collapsed ? it.label : undefined}
+                  title={collapsed ? t('app.nav.' + it.id) : undefined}
                   className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}
                   style={{
                     display: 'flex', alignItems: 'center',
@@ -240,7 +243,7 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
                   }}
                 >
                   <Icon name={it.icon} size={15} />
-                  {!collapsed && <span style={{ flex: 1 }}>{it.label}</span>}
+                  {!collapsed && <span style={{ flex: 1 }}>{t('app.nav.' + it.id)}</span>}
                 </NavLink>
               ))}
             </nav>
@@ -274,7 +277,7 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
             </div>
             <button
               onClick={onSignOut}
-              title="Sair da conta"
+              title={t('app.menu.logout')}
               style={{
                 width: 32, height: 32, borderRadius: 8,
                 border: '1px solid rgba(255,106,61,0.3)',
@@ -299,6 +302,7 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
               planLabel={planLabel}
               onClick={() => navigate('/v0/admin')}
             />
+            <div style={{ padding: '2px 2px 0' }}><LanguageSwitcher /></div>
             <button
               onClick={onSignOut}
               style={{
@@ -317,7 +321,7 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
                 <polyline points="16 17 21 12 16 7"/>
                 <line x1="21" y1="12" x2="9" y2="12"/>
               </svg>
-              Sair da conta
+              {t('app.menu.logout')}
             </button>
           </div>
         )}

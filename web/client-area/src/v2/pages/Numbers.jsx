@@ -14,6 +14,7 @@ import {
   Button, Input, Tabs, Drawer, EmptyState, PageHeader, AIChip,
 } from '../../ds/index.js';
 import { whatsappApi } from '../../api/whatsapp.api.js';
+import { useT } from '../../i18n/index.jsx';
 import { useToast } from '../../ds/toast.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useInstanceSSE } from '../../hooks/useInstanceSSE.js';
@@ -1234,6 +1235,7 @@ function InstanceSSESensor({ instanceId, onStateChange }) {
 // ---------------------------------------------------------------------------
 export default function Numbers() {
   const { authReady } = useAuth();
+  const t = useT();
   const [tab, setTab] = useState('instances');
   const [instances, setInstances] = useState([]);
   const [healthMap, setHealthMap] = useState({});   // id → { msgsToday, deliveryRate, uptime, sparkline }
@@ -1408,15 +1410,15 @@ export default function Numbers() {
       ))}
 
       <PageHeader
-        title="Números"
-        sub="Instâncias WhatsApp + aquecimento automático com proteção anti-ban"
+        title={t('app.numbers.title')}
+        sub={t('app.numbers.sub')}
         actions={
           <>
             {hotCount > 0 && (
               <AIChip text={`${hotCount} chip${hotCount > 1 ? 's' : ''} pronto${hotCount > 1 ? 's' : ''} pra disparo${warmingCount > 0 ? ` · ${warmingCount} aquecendo` : ''}`} tone="brand" />
             )}
             <Button variant="primary" size="sm" onClick={() => setNewModal(true)}>
-              + Conectar número
+              {t('app.numbers.connect')}
             </Button>
           </>
         }
@@ -1424,8 +1426,8 @@ export default function Numbers() {
 
       <Tabs
         tabs={[
-          { id: 'instances', label: '📱 Instâncias', count: instances.length },
-          { id: 'warmup', label: '🔥 Aquecimento', count: warmingCount || undefined },
+          { id: 'instances', label: t('app.numbers.tabInstances'), count: instances.length },
+          { id: 'warmup', label: t('app.numbers.tabWarmup'), count: warmingCount || undefined },
         ]}
         active={tab}
         onChange={setTab}
@@ -1435,20 +1437,20 @@ export default function Numbers() {
       {tab === 'instances' && (
         <>
           {loading && (
-            <div style={{ textAlign: 'center', padding: 40, color: 'var(--ink-400)' }}>Carregando números…</div>
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--ink-400)' }}>{t('app.numbers.loading')}</div>
           )}
           {!loading && error && (
             <div style={{ textAlign: 'center', padding: 40 }}>
               <p style={{ color: 'var(--danger,#DC2626)', marginBottom: 12 }}>{error}</p>
-              <Button variant="secondary" size="sm" onClick={loadNumbers}>Tentar novamente</Button>
+              <Button variant="secondary" size="sm" onClick={loadNumbers}>{t('app.numbers.retry')}</Button>
             </div>
           )}
           {!loading && !error && instances.length === 0 && (
             <EmptyState
               icon="phone"
-              title="Nenhum número conectado"
-              text="Conecte seu primeiro número WhatsApp para começar a enviar mensagens."
-              action={<Button variant="primary" onClick={() => setNewModal(true)}>+ Conectar número</Button>}
+              title={t('app.numbers.emptyTitle')}
+              text={t('app.numbers.emptyText')}
+              action={<Button variant="primary" onClick={() => setNewModal(true)}>{t('app.numbers.connect')}</Button>}
             />
           )}
           {!loading && !error && instances.length > 0 && (

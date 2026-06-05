@@ -13,6 +13,7 @@ import {
   PageHeader, Button, Modal, Input, Icon,
 } from '../../ds/index.js';
 import { useToast } from '../../ds/toast.js';
+import { useT, useI18n } from '../../i18n/index.jsx';
 import { providerApi } from '../../api/admin.api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { supabase } from '../../services/supabase.js';
@@ -1653,10 +1654,21 @@ function ContaTab() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPass, setSavingPass] = useState(false);
   const [msg, setMsg] = useState(null);
+  const { lang, setLang } = useI18n();
+  const tr = useT();
 
   useEffect(() => {
     setFullName(user?.user_metadata?.full_name || user?.user_metadata?.tenant_name || '');
   }, [user?.id]);
+
+  const changeLanguage = async (l) => {
+    setLang(l);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { preferred_language: l } });
+      if (error) throw error;
+      setMsg({ type: 'ok', text: tr('app.account.saved') });
+    } catch (e) { setMsg({ type: 'err', text: e.message || tr('app.account.saveError') }); }
+  };
 
   const saveProfile = async () => {
     setSavingProfile(true); setMsg(null);
@@ -1713,6 +1725,18 @@ function ContaTab() {
       </div>
 
       {msg && <div style={{ marginBottom: 18, padding: '10px 14px', borderRadius: 8, fontSize: 13, background: msg.type === 'ok' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)', color: msg.type === 'ok' ? '#16a34a' : '#dc2626', border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'}` }}>{msg.text}</div>}
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 10 }}>{tr('app.account.prefsTitle')}</div>
+        <WsField label={tr('app.account.language')}>
+          <select value={lang} onChange={e => changeLanguage(e.target.value)} style={wsInput}>
+            <option value="pt">🇧🇷 Português</option>
+            <option value="en">🇺🇸 English</option>
+            <option value="es">🇪🇸 Español</option>
+          </select>
+        </WsField>
+        <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 6 }}>{tr('app.account.languageHint')}</div>
+      </div>
 
       <div style={{ paddingTop: 16, borderTop: '1px solid var(--ink-150)' }}>
         <button onClick={signOut} style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid var(--ink-200)', background: '#fff', color: 'var(--ink-700)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
@@ -1867,12 +1891,71 @@ function LgpdTab() {
 
 // ─── Aba genérica: Placeholder ────────────────────────────────────────────────
 
+// Aba Conta — preferências do usuário (idioma padrão persistido na conta)
+function AccountTab() {
+  const tr = useT();
+  const { lang, setLang, supported } = useI18n();
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  const NAMES = { pt: '🇧🇷 Português', en: '🇺🇸 English', es: '🇪🇸 Español' };
+
+  const notify = (msg) => {
+    try {
+      if (toast?.push) toast.push(msg);
+      else if (typeof toast === 'function') toast(msg);
+    } catch { /* noop */ }
+  };
+
+  const changeLanguage = async (l) => {
+    setLang(l); // aplica na hora
+    setSaving(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { preferred_language: l } });
+      if (error) throw error;
+      notify(tr('app.account.saved'));
+    } catch {
+      notify(tr('app.account.saveError'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ maxWidth: 480 }}>
+      <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>{tr('app.account.prefsTitle')}</h3>
+      <div style={{ padding: 18, border: '1px solid var(--ink-150, rgba(127,127,127,.18))', borderRadius: 14, background: 'var(--ink-25, rgba(127,127,127,.04))' }}>
+        <label htmlFor="acc-lang" style={{ display: 'block', fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>
+          {tr('app.account.language')}
+        </label>
+        <div style={{ fontSize: 12.5, color: 'var(--ink-500, #9aa3b2)', marginBottom: 12 }}>
+          {tr('app.account.languageHint')}
+        </div>
+        <select
+          id="acc-lang"
+          value={lang}
+          onChange={(e) => changeLanguage(e.target.value)}
+          disabled={saving}
+          style={{
+            width: '100%', maxWidth: 260, padding: '10px 12px', borderRadius: 10,
+            border: '1px solid var(--ink-200, rgba(127,127,127,.3))',
+            background: 'var(--ink-0, #fff)', color: 'var(--ink-900, #111)',
+            fontSize: 14, fontFamily: 'inherit', cursor: saving ? 'wait' : 'pointer',
+          }}
+        >
+          {supported.map((l) => <option key={l} value={l}>{NAMES[l]}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 function ComingSoonTab({ label }) {
+  const tr = useT();
   return (
     <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-400)' }}>
       <Icon name="sparkles" size={36} />
       <div style={{ marginTop: 14, fontWeight: 600, color: 'var(--ink-600)', fontSize: 15 }}>{label}</div>
-      <div style={{ fontSize: 13, marginTop: 4 }}>Em construção — disponível em breve.</div>
+      <div style={{ fontSize: 13, marginTop: 4 }}>{tr('app.admin.comingSoon')}</div>
     </div>
   );
 }
@@ -1896,6 +1979,7 @@ const TABS = [
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState('users');
+  const tr = useT();
 
   const currentTab = TABS.find(t => t.id === activeTab) || TABS[0];
   const TabComponent = currentTab.component;
@@ -1903,9 +1987,9 @@ export default function Admin() {
   return (
     <>
       <PageHeader
-        crumbs={['Ruptur OS', 'Sistema', 'Configurações']}
-        title="Admin"
-        sub="Workspace, equipe, integrações e segurança"
+        crumbs={['Ruptur OS', tr('app.admin.crumbSystem'), tr('app.admin.crumbSettings')]}
+        title={tr('app.admin.title')}
+        sub={tr('app.admin.sub')}
       />
 
       {/* Tab bar */}
@@ -1926,7 +2010,7 @@ export default function Admin() {
               transition: 'color .15s',
             }}
           >
-            {t.label}
+            {tr('app.admin.tabs.' + t.id)}
             {t.badge != null && (
               <span style={{
                 fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, padding: '0 5px',

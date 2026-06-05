@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import CheckoutModal from '../../components/CheckoutModal';
+import { useT } from '../../i18n/index.jsx';
 
 const PLAN_HIGHLIGHTS = {
   trial:    { color: '#6B7280', badge: 'Grátis 7 dias' },
@@ -11,6 +12,7 @@ const PLAN_HIGHLIGHTS = {
 };
 
 function PlanCard({ plan, currentPlanId, onSelect }) {
+  const t = useT();
   const meta = PLAN_HIGHLIGHTS[plan.id] || {};
   const isCurrent = plan.id === currentPlanId;
   const isHighlighted = meta.highlight;
@@ -66,7 +68,7 @@ function PlanCard({ plan, currentPlanId, onSelect }) {
           fontWeight: 700, fontSize: 13, cursor: isCurrent ? 'default' : 'pointer',
         }}
       >
-        {isCurrent ? 'Plano atual' : plan.price_cents === 0 ? 'Começar grátis' : 'Assinar'}
+        {isCurrent ? t('app.billing.current') : plan.price_cents === 0 ? t('app.billing.startFree') : t('app.billing.subscribe')}
       </button>
     </div>
   );
@@ -108,6 +110,7 @@ function PackageCard({ pkg, onBuy }) {
 }
 
 export default function Billing() {
+  const t = useT();
   const { tenant } = useAuth();
   const [plans, setPlans] = useState([]);
   const [packages, setPackages] = useState([]);
@@ -167,9 +170,9 @@ export default function Billing() {
     <div style={{ padding: '24px 28px', maxWidth: 900, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: 'white', margin: 0 }}>Receita</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: 'white', margin: 0 }}>{t('app.billing.title')}</h1>
         <p style={{ fontSize: 13, color: '#6B7280', margin: '4px 0 0' }}>
-          Planos de assinatura e créditos para campanhas
+          {t('app.billing.sub')}
         </p>
       </div>
 
@@ -182,7 +185,7 @@ export default function Billing() {
         }}>
           <div>
             <div style={{ fontSize: 12, color: '#FF8C69', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase' }}>
-              Plano atual
+              {t('app.billing.current')}
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'white', marginTop: 2 }}>
               {subscription.plan_id} · {subscription.status}
@@ -196,7 +199,7 @@ export default function Billing() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 0 }}>
-        {[['planos', 'Planos'], ['creditos', 'Créditos avulsos']].map(([id, label]) => (
+        {[['planos', t('app.billing.tabPlans')], ['creditos', t('app.billing.tabCredits')]].map(([id, label]) => (
           <button key={id} onClick={() => setActiveTab(id)} style={{
             padding: '8px 16px', border: 'none', borderRadius: '8px 8px 0 0',
             background: activeTab === id ? 'rgba(255,106,61,0.1)' : 'transparent',
@@ -210,7 +213,7 @@ export default function Billing() {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: '#6B7280' }}>Carregando...</div>
+        <div style={{ textAlign: 'center', padding: 40, color: '#6B7280' }}>{t('app.billing.loading')}</div>
       ) : activeTab === 'planos' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
           {plans.map(plan => (
@@ -223,7 +226,7 @@ export default function Billing() {
           ))}
           {plans.length === 0 && (
             <div style={{ gridColumn: '1/-1', textAlign: 'center', color: '#6B7280', padding: 40 }}>
-              Planos não disponíveis no momento.
+              {t('app.billing.noPlans')}
             </div>
           )}
         </div>

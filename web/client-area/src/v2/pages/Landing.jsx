@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, Button, SocialProofToasts } from '../../ds/index.js';
+import { useT } from '../../i18n/index.jsx';
+import LanguageSwitcher from '../../components/LanguageSwitcher.jsx';
 
 const LANDING_CSS = `
   .lp { background: var(--ink-0); min-height: 100vh; color: var(--ink-900); }
@@ -135,17 +137,9 @@ const LANDING_CSS = `
 `;
 
 function FAQ() {
+  const t = useT();
   const [open, setOpen] = useState(0);
-  const items = [
-    { q: 'Como o warmup de números funciona?', a: 'Quando você conecta uma nova instância via uazapi, o Ruptur inicia um ritmo controlado de mensagens (saudações entre números próprios, simulação de conversa real e crescimento gradual) por 7, 14 ou 30 dias. Isso constrói reputação no WhatsApp e reduz drasticamente o risco de banimento antes de você começar a disparar.' },
-    { q: 'Posso enviar mensagens em massa para meus clientes?', a: 'Sim. As campanhas usam segmentação de tags, lead score e estágio do pipeline. O throttling respeita a saúde de cada número — instância recém-aquecida envia menos por hora que uma madura. Templates aprovados pela Meta passam livremente, e mensagens livres seguem regras de janela de 24h.' },
-    { q: 'O que são os fluxos conversacionais?', a: 'É um editor visual onde você conecta nós (mensagem, espera, condição, atribui SDR, marca tag, gera link). Use para qualificar lead novo automaticamente, agendar reunião, responder dúvidas frequentes e fazer handoff para humano quando precisar.' },
-    { q: 'Preciso usar meu número pessoal de WhatsApp?', a: 'Não. A Ruptur conecta via uazapi a números dedicados da sua empresa — você pode usar chips novos ou existentes. Funciona com WhatsApp Business e também com Cloud API oficial (Meta) no plano Scale. Seu número pessoal continua protegido.' },
-    { q: 'Quantos números posso conectar e disparar por dia?', a: 'Starter: 1 número, ~300 msgs/dia após warmup. Growth: 3 números, ~1.500 msgs/dia. Scale: ilimitado, ~10k+ msgs/dia. O limite real depende da saúde de cada instância — números maduros disparam mais.' },
-    { q: 'Posso importar leads de planilha ou de outro CRM?', a: 'Sim. Aceitamos CSV no onboarding e temos importadores para HubSpot, Pipedrive, RD Station. Mapeamos campos automaticamente e validamos formato de telefone brasileiro.' },
-    { q: 'A Ruptur é compatível com a LGPD?', a: 'Sim. Hospedamos dados no Brasil (AWS São Paulo), temos DPA pronto, log de auditoria, anonimização sob demanda e retenção configurável por workspace. Opt-out automático em campanhas.' },
-    { q: 'Preciso de cartão de crédito para começar?', a: 'Não. O teste de 14 dias é gratuito e sem cartão. Você só cadastra forma de pagamento ao final do trial — processamos via Getnet (Pix, cartão, boleto).' },
-  ];
+  const items = t('landing.faq');
   return (
     <div className="faq">
       {items.map((it, i) => (
@@ -161,8 +155,17 @@ function FAQ() {
   );
 }
 
+const PILLAR_META = [
+  { cls: 'green', icon: 'fire' },
+  { cls: '', icon: 'broadcast' },
+  { cls: 'blue', icon: 'trendUp' },
+];
+
 export default function Landing() {
   const navigate = useNavigate();
+  const t = useT();
+  const pillars = t('landing.pillars');
+  const pricing = t('landing.pricing');
   const go = (r) => navigate(`/v2/${r}`);
   // Para o app real (Supabase auth + APIs reais): /login, /signup, /dashboard...
   const goReal = (r) => navigate(r.startsWith('/') ? r : `/${r}`);
@@ -177,15 +180,17 @@ export default function Landing() {
             <span>Ruptur OS</span>
           </div>
           <nav className="lp-nav-links">
-            <a href="#produto">Produto</a>
-            <a href="#caa">Como funciona</a>
-            <a href="#personas" onClick={(e) => { e.preventDefault(); go('personas'); }}>Para quem</a>
-            <a href="#precos">Preços</a>
-            <a href="#faq">FAQ</a>
+            <a href="#produto">{t('landing.nav.product')}</a>
+            <a href="#caa">{t('landing.nav.how')}</a>
+            <a href="#personas" onClick={(e) => { e.preventDefault(); go('personas'); }}>{t('landing.nav.who')}</a>
+            <a href="#precos">{t('landing.nav.pricing')}</a>
+            <a href="#faq">{t('landing.nav.faq')}</a>
+            <a href="/blog">{t('landing.nav.blog')}</a>
           </nav>
           <div className="lp-nav-cta">
-            <Button variant="ghost" size="sm" onClick={() => goReal('/login')}>Entrar</Button>
-            <Button variant="primary" size="sm" onClick={() => goReal('/signup')}>Começar grátis</Button>
+            <LanguageSwitcher />
+            <Button variant="ghost" size="sm" onClick={() => goReal('/login')}>{t('landing.nav.login')}</Button>
+            <Button variant="primary" size="sm" onClick={() => goReal('/signup')}>{t('landing.nav.signup')}</Button>
           </div>
         </div>
       </header>
@@ -195,19 +200,19 @@ export default function Landing() {
           <div>
             <div className="lp-eyebrow">
               <span className="pill">RUPTUR OS</span>
-              <span>Sistema operacional de receita assistido por IA</span>
+              <span>{t('landing.hero.badge')}</span>
             </div>
-            <h1 className="lp-h1">Vender e atender pelo <em>WhatsApp em escala</em> — sem queimar número, sem perder lead.</h1>
-            <p className="lp-sub">O Ruptur OS conecta seus números, aquece com segurança, dispara fluxos que convertem e organiza sua receita em um CRM previsível — com IA trabalhando 24/7 por você.</p>
+            <h1 className="lp-h1">{t('landing.hero.titleA')}<em>{t('landing.hero.titleEm')}</em>{t('landing.hero.titleB')}</h1>
+            <p className="lp-sub">{t('landing.hero.sub')}</p>
             <div className="lp-cta-row">
-              <Button variant="primary" size="lg" icon="arrowRight" onClick={() => goReal('/signup')}>Começar teste de 14 dias</Button>
-              <Button variant="ghost" size="lg" onClick={() => go('dashboard')}>Ver demo (mock) →</Button>
+              <Button variant="primary" size="lg" icon="arrowRight" onClick={() => goReal('/signup')}>{t('landing.hero.ctaPrimary')}</Button>
+              <Button variant="ghost" size="lg" onClick={() => go('dashboard')}>{t('landing.hero.ctaDemo')}</Button>
             </div>
             <div className="lp-trust">
               <span className="stars">★★★★★</span>
-              <span><b style={{ color: 'var(--ink-900)' }}>4,8/5</b> — 412 avaliações</span>
+              <span><b style={{ color: 'var(--ink-900)' }}>4,8/5</b> {t('landing.hero.ratingSuffix')}</span>
               <span style={{ color: 'var(--ink-300)' }}>•</span>
-              <span>Sem cartão · LGPD compliant</span>
+              <span>{t('landing.hero.noCard')}</span>
             </div>
           </div>
 
@@ -242,7 +247,7 @@ export default function Landing() {
 
       <section className="lp-logos">
         <div className="lp-logos-inner">
-          <span className="lp-logos-label">+1.200 operações vendendo melhor</span>
+          <span className="lp-logos-label">{t('landing.logos.label')}</span>
           <span className="lp-logo-item">CERVEJARIA RIACHO</span>
           <span className="lp-logo-item">studio glow</span>
           <span className="lp-logo-item">IMOB · NORTE</span>
@@ -255,27 +260,27 @@ export default function Landing() {
       <section className="lp-section caa" id="caa" style={{ paddingTop: 64, paddingBottom: 48 }}>
         <div className="lp-section-inner">
           <div style={{ textAlign: 'center', marginBottom: 36 }}>
-            <div className="lp-kicker">O que é o Ruptur OS</div>
-            <h2 className="lp-h2" style={{ maxWidth: 720, margin: '0 auto' }}>Trê<span style={{ color: 'var(--brand-500)' }}>s</span> verbos. Um sistema. Sua máquina de receita pelo WhatsApp.</h2>
+            <div className="lp-kicker">{t('landing.caa.kicker')}</div>
+            <h2 className="lp-h2" style={{ maxWidth: 720, margin: '0 auto' }}>{t('landing.caa.title')}</h2>
           </div>
           <div className="caa-grid">
             <div className="caa-step">
               <div className="caa-num">01</div>
               <div className="caa-ic" style={{ background: 'var(--wa-50)', color: 'var(--wa-600)' }}><Icon name="wa" size={22} /></div>
-              <h3>Conecta.</h3>
-              <p>Pluga seus números de WhatsApp em minutos via uazapi ou Cloud API. Multi-instância, multi-time, um lugar só.</p>
+              <h3>{t('landing.caa.steps.0.title')}</h3>
+              <p>{t('landing.caa.steps.0.desc')}</p>
             </div>
             <div className="caa-step">
               <div className="caa-num">02</div>
               <div className="caa-ic" style={{ background: 'var(--brand-50)', color: 'var(--brand-500)' }}><Icon name="fire" size={22} /></div>
-              <h3>Aquece.</h3>
-              <p>Warmup automático, throttling inteligente e kill switch anti-ban. Seus chips ganham reputação sem você pensar.</p>
+              <h3>{t('landing.caa.steps.1.title')}</h3>
+              <p>{t('landing.caa.steps.1.desc')}</p>
             </div>
             <div className="caa-step">
               <div className="caa-num">03</div>
               <div className="caa-ic" style={{ background: '#F5F3FF', color: '#6D28D9' }}><Icon name="sparkles" size={22} /></div>
-              <h3>Vende.</h3>
-              <p>Fluxos conversacionais, dispara, qualifica, agenda e fecha — com IA sugerindo a próxima ação em cada lead.</p>
+              <h3>{t('landing.caa.steps.2.title')}</h3>
+              <p>{t('landing.caa.steps.2.desc')}</p>
             </div>
           </div>
         </div>
@@ -284,41 +289,23 @@ export default function Landing() {
       <section className="lp-section" id="pilares">
         <div className="lp-section-inner">
           <div className="lp-section-head">
-            <div className="lp-kicker">Como funciona</div>
-            <h2 className="lp-h2">Três pilares para uma máquina de vendas previsível</h2>
-            <p className="lp-section-sub">Mesma metodologia das maiores operações B2B, adaptada ao jeito brasileiro de vender por WhatsApp.</p>
+            <div className="lp-kicker">{t('landing.sections.pillarsKicker')}</div>
+            <h2 className="lp-h2">{t('landing.sections.pillarsTitle')}</h2>
+            <p className="lp-section-sub">{t('landing.sections.pillarsSub')}</p>
           </div>
           <div className="pillars">
-            <div className="pillar green">
-              <div className="pillar-ic"><Icon name="fire" size={22} /></div>
-              <h3>Múltiplos números com warmup</h3>
-              <p>Conecte vários chips via uazapi, aqueça cada número gradualmente e dispare sem queimar instância.</p>
-              <ul>
-                <li><Icon name="check" size={14} />Warmup automático em 7/14/30 dias</li>
-                <li><Icon name="check" size={14} />Health score por número em tempo real</li>
-                <li><Icon name="check" size={14} />Throttling inteligente anti-ban</li>
-              </ul>
-            </div>
-            <div className="pillar">
-              <div className="pillar-ic"><Icon name="broadcast" size={22} /></div>
-              <h3>Disparos e fluxos conversacionais</h3>
-              <p>Mande campanhas segmentadas em massa e construa chatbots que qualificam, agendam e fecham 24/7.</p>
-              <ul>
-                <li><Icon name="check" size={14} />Campanhas com segmentação e A/B</li>
-                <li><Icon name="check" size={14} />Flow builder visual com handoff humano</li>
-                <li><Icon name="check" size={14} />Respostas rápidas e templates aprovados</li>
-              </ul>
-            </div>
-            <div className="pillar blue">
-              <div className="pillar-ic"><Icon name="trendUp" size={22} /></div>
-              <h3>CRM com SDR automation</h3>
-              <p>Pipeline previsível, cadências, lead score e atribuição automática. Receita Previsível na prática.</p>
-              <ul>
-                <li><Icon name="check" size={14} />Funil Seeds/Nets/Spears</li>
-                <li><Icon name="check" size={14} />Round-robin SDR com SLA &lt;15min</li>
-                <li><Icon name="check" size={14} />Forecast ponderado e win-rate</li>
-              </ul>
-            </div>
+            {pillars.map((p, i) => (
+              <div key={i} className={`pillar ${PILLAR_META[i].cls}`.trim()}>
+                <div className="pillar-ic"><Icon name={PILLAR_META[i].icon} size={22} /></div>
+                <h3>{p.title}</h3>
+                <p>{p.desc}</p>
+                <ul>
+                  {p.items.map((it, j) => (
+                    <li key={j}><Icon name="check" size={14} />{it}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -326,56 +313,28 @@ export default function Landing() {
       <section className="lp-section lp-pricing" id="precos">
         <div className="lp-section-inner">
           <div className="lp-section-head">
-            <div className="lp-kicker">Preços</div>
-            <h2 className="lp-h2">Cresça sem reescrever o stack</h2>
-            <p className="lp-section-sub">Cobramos por workspace, não por usuário. Sem letra miúda.</p>
+            <div className="lp-kicker">{t('landing.sections.pricingKicker')}</div>
+            <h2 className="lp-h2">{t('landing.sections.pricingTitle')}</h2>
+            <p className="lp-section-sub">{t('landing.sections.pricingSub')}</p>
           </div>
           <div className="price-grid">
-            <div className="price-card">
-              <h3 className="price-name">Starter</h3>
-              <p className="price-amount">R$ 197<small>/mês</small></p>
-              <p className="price-desc">Para times iniciando a vender de forma estruturada.</p>
-              <ul className="price-feats">
-                <li><Icon name="check" size={14} />Até 3 usuários</li>
-                <li><Icon name="check" size={14} />1 instância WhatsApp + warmup</li>
-                <li><Icon name="check" size={14} />CRM e pipeline completos</li>
-                <li><Icon name="check" size={14} />5.000 mensagens/mês</li>
-                <li><Icon name="check" size={14} />Inbox unificada</li>
-                <li><Icon name="check" size={14} />1 fluxo conversacional</li>
-              </ul>
-              <Button variant="secondary" onClick={() => goReal('/signup')}>Começar grátis</Button>
-            </div>
-            <div className="price-card featured">
-              <span className="price-tag">Mais popular</span>
-              <h3 className="price-name" style={{ color: 'var(--brand-500)' }}>Growth</h3>
-              <p className="price-amount">R$ 497<small>/mês</small></p>
-              <p className="price-desc">Para PMEs com SDR + AE e meta clara de crescimento.</p>
-              <ul className="price-feats">
-                <li><Icon name="check" size={14} />Até 10 usuários</li>
-                <li><Icon name="check" size={14} />3 instâncias com warmup paralelo</li>
-                <li><Icon name="check" size={14} />30.000 mensagens/mês</li>
-                <li><Icon name="check" size={14} />Campanhas em massa + segmentação</li>
-                <li><Icon name="check" size={14} />Fluxos ilimitados + handoff</li>
-                <li><Icon name="check" size={14} />Cadências SDR + round-robin</li>
-                <li><Icon name="check" size={14} />Forecast e win-rate</li>
-              </ul>
-              <Button variant="primary" onClick={() => goReal('/signup')}>Começar agora</Button>
-            </div>
-            <div className="price-card">
-              <h3 className="price-name">Scale</h3>
-              <p className="price-amount">R$ 1.297<small>/mês</small></p>
-              <p className="price-desc">Times maduros com múltiplos squads, marca e franquias.</p>
-              <ul className="price-feats">
-                <li><Icon name="check" size={14} />Usuários ilimitados</li>
-                <li><Icon name="check" size={14} />Instâncias ilimitadas + Cloud API Meta</li>
-                <li><Icon name="check" size={14} />200.000+ mensagens/mês</li>
-                <li><Icon name="check" size={14} />A/B testing em fluxos e campanhas</li>
-                <li><Icon name="check" size={14} />API & webhooks abertos</li>
-                <li><Icon name="check" size={14} />NPS, health score, CS</li>
-                <li><Icon name="check" size={14} />SSO + auditoria + DPA</li>
-              </ul>
-              <Button variant="secondary" onClick={() => goReal('/signup')}>Falar com vendas</Button>
-            </div>
+            {pricing.plans.map((plan, i) => {
+              const featured = i === 1;
+              return (
+                <div key={plan.name} className={featured ? 'price-card featured' : 'price-card'}>
+                  {featured && <span className="price-tag">{pricing.popular}</span>}
+                  <h3 className="price-name" style={featured ? { color: 'var(--brand-500)' } : undefined}>{plan.name}</h3>
+                  <p className="price-amount">{plan.price}<small>{pricing.perMonth}</small></p>
+                  <p className="price-desc">{plan.desc}</p>
+                  <ul className="price-feats">
+                    {plan.feats.map((f, j) => (
+                      <li key={j}><Icon name="check" size={14} />{f}</li>
+                    ))}
+                  </ul>
+                  <Button variant={featured ? 'primary' : 'secondary'} onClick={() => goReal('/signup')}>{plan.cta}</Button>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -383,17 +342,17 @@ export default function Landing() {
       <section className="lp-section" id="faq">
         <div className="lp-section-inner">
           <div className="lp-section-head">
-            <div className="lp-kicker">Perguntas frequentes</div>
-            <h2 className="lp-h2">Tirando as dúvidas mais comuns</h2>
+            <div className="lp-kicker">{t('landing.sections.faqKicker')}</div>
+            <h2 className="lp-h2">{t('landing.sections.faqTitle')}</h2>
           </div>
           <FAQ />
         </div>
       </section>
 
       <section className="lp-cta-band">
-        <h2>Pronto para parar de perder lead?</h2>
-        <p>Conecte seu WhatsApp em 4 minutos e veja seu funil no mesmo dia.</p>
-        <Button variant="primary" size="lg" icon="arrowRight" onClick={() => goReal('/signup')}>Começar teste de 14 dias</Button>
+        <h2>{t('landing.ctaBand.title')}</h2>
+        <p>{t('landing.ctaBand.sub')}</p>
+        <Button variant="primary" size="lg" icon="arrowRight" onClick={() => goReal('/signup')}>{t('landing.ctaBand.cta')}</Button>
       </section>
 
       <footer className="lp-footer">
@@ -404,15 +363,16 @@ export default function Landing() {
                 <div className="lp-logo-mark">R</div>
                 <span>Ruptur OS</span>
               </div>
-              <p style={{ color: 'var(--ink-600)', fontSize: 13.5, margin: 0, maxWidth: 320 }}>Sistema operacional de receita assistido por IA para quem vende pelo WhatsApp.</p>
+              <p style={{ color: 'var(--ink-600)', fontSize: 13.5, margin: 0, maxWidth: 320 }}>{t('footer.tagline')}</p>
+              <p style={{ color: 'var(--ink-500)', fontSize: 12.5, margin: '12px 0 0', maxWidth: 320 }}>{t('footer.group')} <a href="https://2dlcompany.com.br" target="_blank" rel="noopener" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>2DL Company</a>.</p>
             </div>
-            <div><h4>Produto</h4><ul><li><a href="#caa">Conecta</a></li><li><a href="#caa">Aquece</a></li><li><a href="#caa">Vende</a></li><li><a href="#precos">Preços</a></li></ul></div>
-            <div><h4>Empresa</h4><ul><li><a href="#">Sobre</a></li><li><a href="#">Carreiras</a></li><li><a href="#">Blog</a></li><li><a href="#">Contato</a></li></ul></div>
-            <div><h4>Legal</h4><ul><li><a href="#">Termos</a></li><li><a href="#">Privacidade</a></li><li><a href="#">LGPD</a></li><li><a href="#">Status</a></li></ul></div>
+            <div><h4>{t('footer.colProduct')}</h4><ul><li><a href="#caa">{t('footer.connect')}</a></li><li><a href="#caa">{t('footer.warm')}</a></li><li><a href="#caa">{t('footer.sell')}</a></li><li><a href="#precos">{t('landing.nav.pricing')}</a></li></ul></div>
+            <div><h4>{t('footer.colCompany')}</h4><ul><li><a href="#">{t('footer.about')}</a></li><li><a href="#">{t('footer.careers')}</a></li><li><a href="/blog">{t('footer.blog')}</a></li><li><a href="#">{t('footer.contact')}</a></li></ul></div>
+            <div><h4>{t('footer.colLegal')}</h4><ul><li><a href="#">{t('footer.terms')}</a></li><li><a href="#">{t('footer.privacy')}</a></li><li><a href="#">{t('footer.lgpd')}</a></li><li><a href="#">{t('footer.status')}</a></li></ul></div>
           </div>
           <div className="lp-footer-bottom">
-            <span>© 2026 Ruptur Tecnologia Ltda · CNPJ 00.000.000/0001-00</span>
-            <span>Feito em São Paulo · 🇧🇷</span>
+            <span>{t('footer.copyright')}</span>
+            <span>{t('footer.madeBy')} <a href="https://2dlcompany.com.br" target="_blank" rel="noopener" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>2DL Company</a> · {t('footer.madeIn')} 🇧🇷</span>
           </div>
         </div>
       </footer>

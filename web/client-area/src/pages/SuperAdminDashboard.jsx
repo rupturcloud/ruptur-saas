@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, Plus, Mail, Trash2, X, CheckCircle2, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useT } from '../i18n/index.jsx';
 
 const SuperAdminDashboard = () => {
   const { session } = useAuth();
@@ -13,6 +14,7 @@ const SuperAdminDashboard = () => {
   const [inviting, setInviting] = useState(false);
   const [lastInviteUrl, setLastInviteUrl] = useState('');
   const [activeTab, setActiveTab] = useState('admins');
+  const tr = useT();
 
   // Buscar superadmins
   useEffect(() => {
@@ -113,21 +115,21 @@ const SuperAdminDashboard = () => {
       <div>
         {/* Header */}
         <div style={{ marginBottom: '24px' }}>
-          <div style={{ fontSize: 12, color: '#9AA2AE', marginBottom: 4 }}>Ruptur OS · Plataforma</div>
+          <div style={{ fontSize: 12, color: '#9AA2AE', marginBottom: 4 }}>{tr('app.superAdmin.crumb')}</div>
           <h1 style={{ fontSize: '1.4rem', fontWeight: '800', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '10px', letterSpacing: '-.02em' }}>
             <Shield size={22} style={{ color: '#FF6A3D' }} />
-            Gerenciamento de Superadmin
+            {tr('app.superAdmin.title')}
           </h1>
           <p style={{ fontSize: '13px', color: '#9AA2AE', margin: 0 }}>
-            Configure e gerencie superadministradores da plataforma Ruptur
+            {tr('app.superAdmin.sub')}
           </p>
         </div>
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '16px' }}>
           {[
-            { key: 'admins', label: 'Superadmins Ativos', count: admins.length },
-            { key: 'invites', label: 'Convites Pendentes', count: invites.filter(i => i.status === 'pending').length },
+            { key: 'admins', label: tr('app.superAdmin.tabActive'), count: admins.length },
+            { key: 'invites', label: tr('app.superAdmin.tabInvites'), count: invites.filter(i => i.status === 'pending').length },
           ].map(tab => (
             <button
               key={tab.key}
@@ -253,7 +255,7 @@ const SuperAdminDashboard = () => {
                       }}
                       onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,68,102,0.12)'}
                       onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,68,102,0.05)'}
-                      title="Remover superadmin"
+                      title={tr('app.superAdmin.remove')}
                     >
                       <Trash2 size={16} />
                     </button>
