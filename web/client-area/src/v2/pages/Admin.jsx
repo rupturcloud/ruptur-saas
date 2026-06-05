@@ -63,10 +63,11 @@ function UsersTab() {
   const [loading, setLoading] = useState(false);
   const [actionState, setActionState] = useState({});
   const [roleOpen, setRoleOpen] = useState(null);
+  const [loadError, setLoadError] = useState(null);   // erro do fetch de membros (diagnóstico)
 
   // Selecionar tenant inicial a partir do AuthContext (sem chamar API)
   useEffect(() => {
-    if (tenant?.id) setSelectedId(tenant.id);
+    if (tenant?.id) setSelectedId((prev) => prev || tenant.id);
   }, [tenant?.id]);
 
   // Super admins: buscar todos os tenants para o selector
@@ -77,14 +78,29 @@ function UsersTab() {
       .then(d => setAllTenants(d.tenants || []));
   }, [isPlatformAdmin, session?.access_token]);
 
+  // FALLBACK CRÍTICO: super admin SEM membership própria não recebe tenant do
+  // AuthContext → selectedId ficava null → a lista NUNCA carregava (vazio
+  // permanente). Aqui selecionamos o primeiro tenant disponível assim que a
+  // lista de tenants da plataforma chega.
+  useEffect(() => {
+    if (!selectedId && allTenants.length > 0) setSelectedId(allTenants[0].id);
+  }, [selectedId, allTenants]);
+
   // Carregar membros do tenant selecionado
   const loadMembers = useCallback(() => {
     if (!selectedId || !session?.access_token) return;
     setLoading(true);
+    setLoadError(null);
     fetch(`/api/admin/tenants/${selectedId}/members?includeInactive=true`, { headers: h })
-      .then(r => r.ok ? r.json() : { members: [] })
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error || `Erro ${r.status} ao carregar membros`);
+        }
+        return r.json();
+      })
       .then(d => setMembers(d.members || []))
-      .catch(() => setMembers([]))
+      .catch((e) => { setMembers([]); setLoadError(e.message); })
       .finally(() => setLoading(false));
   }, [selectedId, session?.access_token]);
 
@@ -196,7 +212,19 @@ function UsersTab() {
             {loading && (
               <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-400)' }}>Carregando...</td></tr>
             )}
-            {!loading && members.length === 0 && (
+            {!loading && loadError && (
+              <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#dc2626' }}>
+                ⚠️ {loadError}
+              </td></tr>
+            )}
+            {!loading && !loadError && !selectedId && (
+              <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-400)' }}>
+                {isPlatformAdmin
+                  ? 'Super admin sem tenants na plataforma — verifique a tabela platform_admins/tenants.'
+                  : 'Nenhum tenant vinculado ao seu usuário. Faça login com um usuário que tenha acesso.'}
+              </td></tr>
+            )}
+            {!loading && !loadError && selectedId && members.length === 0 && (
               <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-400)' }}>Nenhum membro neste tenant.</td></tr>
             )}
             {!loading && members.map((m, i) => {
