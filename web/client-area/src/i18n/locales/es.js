@@ -73,6 +73,20 @@ export const es = {
       faqKicker: 'Preguntas frecuentes',
       faqTitle: 'Resolviendo las dudas más comunes',
     },
+    pillars: [
+      { title: 'Múltiples números con calentamiento', desc: 'Conecta varios chips vía uazapi, calienta cada número gradualmente y dispara sin quemar instancias.', items: ['Calentamiento automático en 7/14/30 días', 'Health score por número en tiempo real', 'Throttling inteligente anti-baneo'] },
+      { title: 'Envíos y flujos conversacionales', desc: 'Envía campañas segmentadas en masa y construye chatbots que califican, agendan y cierran 24/7.', items: ['Campañas con segmentación y A/B', 'Constructor visual de flujos con handoff humano', 'Respuestas rápidas y plantillas aprobadas'] },
+      { title: 'CRM con automatización SDR', desc: 'Pipeline previsible, cadencias, lead score y asignación automática. Ingresos Previsibles en la práctica.', items: ['Embudo Seeds/Nets/Spears', 'Round-robin SDR con SLA <15min', 'Forecast ponderado y win-rate'] },
+    ],
+    pricing: {
+      perMonth: '/mes',
+      popular: 'Más popular',
+      plans: [
+        { name: 'Starter', price: 'R$ 197', desc: 'Para equipos que empiezan a vender de forma estructurada.', cta: 'Empezar gratis', feats: ['Hasta 3 usuarios', '1 instancia WhatsApp + warmup', 'CRM y pipeline completos', '5.000 mensajes/mes', 'Inbox unificada', '1 flujo conversacional'] },
+        { name: 'Growth', price: 'R$ 497', desc: 'Para pymes con SDR + AE y meta clara de crecimiento.', cta: 'Empezar ahora', feats: ['Hasta 10 usuarios', '3 instancias con warmup paralelo', '30.000 mensajes/mes', 'Campañas en masa + segmentación', 'Flujos ilimitados + handoff', 'Cadencias SDR + round-robin', 'Forecast y win-rate'] },
+        { name: 'Scale', price: 'R$ 1.297', desc: 'Equipos maduros con múltiples squads, marca y franquicias.', cta: 'Hablar con ventas', feats: ['Usuarios ilimitados', 'Instancias ilimitadas + Cloud API Meta', '200.000+ mensajes/mes', 'A/B testing en flujos y campañas', 'API & webhooks abiertos', 'NPS, health score, CS', 'SSO + auditoría + DPA'] },
+      ],
+    },
     ctaBand: {
       title: '¿Listo para dejar de perder leads?',
       sub: 'Conecta tu WhatsApp en 4 minutos y mira tu embudo el mismo día.',

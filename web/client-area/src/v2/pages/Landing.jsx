@@ -162,9 +162,17 @@ function FAQ() {
   );
 }
 
+const PILLAR_META = [
+  { cls: 'green', icon: 'fire' },
+  { cls: '', icon: 'broadcast' },
+  { cls: 'blue', icon: 'trendUp' },
+];
+
 export default function Landing() {
   const navigate = useNavigate();
   const t = useT();
+  const pillars = t('landing.pillars');
+  const pricing = t('landing.pricing');
   const go = (r) => navigate(`/v2/${r}`);
   // Para o app real (Supabase auth + APIs reais): /login, /signup, /dashboard...
   const goReal = (r) => navigate(r.startsWith('/') ? r : `/${r}`);
@@ -292,36 +300,18 @@ export default function Landing() {
             <p className="lp-section-sub">{t('landing.sections.pillarsSub')}</p>
           </div>
           <div className="pillars">
-            <div className="pillar green">
-              <div className="pillar-ic"><Icon name="fire" size={22} /></div>
-              <h3>Múltiplos números com warmup</h3>
-              <p>Conecte vários chips via uazapi, aqueça cada número gradualmente e dispare sem queimar instância.</p>
-              <ul>
-                <li><Icon name="check" size={14} />Warmup automático em 7/14/30 dias</li>
-                <li><Icon name="check" size={14} />Health score por número em tempo real</li>
-                <li><Icon name="check" size={14} />Throttling inteligente anti-ban</li>
-              </ul>
-            </div>
-            <div className="pillar">
-              <div className="pillar-ic"><Icon name="broadcast" size={22} /></div>
-              <h3>Disparos e fluxos conversacionais</h3>
-              <p>Mande campanhas segmentadas em massa e construa chatbots que qualificam, agendam e fecham 24/7.</p>
-              <ul>
-                <li><Icon name="check" size={14} />Campanhas com segmentação e A/B</li>
-                <li><Icon name="check" size={14} />Flow builder visual com handoff humano</li>
-                <li><Icon name="check" size={14} />Respostas rápidas e templates aprovados</li>
-              </ul>
-            </div>
-            <div className="pillar blue">
-              <div className="pillar-ic"><Icon name="trendUp" size={22} /></div>
-              <h3>CRM com SDR automation</h3>
-              <p>Pipeline previsível, cadências, lead score e atribuição automática. Receita Previsível na prática.</p>
-              <ul>
-                <li><Icon name="check" size={14} />Funil Seeds/Nets/Spears</li>
-                <li><Icon name="check" size={14} />Round-robin SDR com SLA &lt;15min</li>
-                <li><Icon name="check" size={14} />Forecast ponderado e win-rate</li>
-              </ul>
-            </div>
+            {pillars.map((p, i) => (
+              <div key={i} className={`pillar ${PILLAR_META[i].cls}`.trim()}>
+                <div className="pillar-ic"><Icon name={PILLAR_META[i].icon} size={22} /></div>
+                <h3>{p.title}</h3>
+                <p>{p.desc}</p>
+                <ul>
+                  {p.items.map((it, j) => (
+                    <li key={j}><Icon name="check" size={14} />{it}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -334,51 +324,23 @@ export default function Landing() {
             <p className="lp-section-sub">{t('landing.sections.pricingSub')}</p>
           </div>
           <div className="price-grid">
-            <div className="price-card">
-              <h3 className="price-name">Starter</h3>
-              <p className="price-amount">R$ 197<small>/mês</small></p>
-              <p className="price-desc">Para times iniciando a vender de forma estruturada.</p>
-              <ul className="price-feats">
-                <li><Icon name="check" size={14} />Até 3 usuários</li>
-                <li><Icon name="check" size={14} />1 instância WhatsApp + warmup</li>
-                <li><Icon name="check" size={14} />CRM e pipeline completos</li>
-                <li><Icon name="check" size={14} />5.000 mensagens/mês</li>
-                <li><Icon name="check" size={14} />Inbox unificada</li>
-                <li><Icon name="check" size={14} />1 fluxo conversacional</li>
-              </ul>
-              <Button variant="secondary" onClick={() => goReal('/signup')}>Começar grátis</Button>
-            </div>
-            <div className="price-card featured">
-              <span className="price-tag">Mais popular</span>
-              <h3 className="price-name" style={{ color: 'var(--brand-500)' }}>Growth</h3>
-              <p className="price-amount">R$ 497<small>/mês</small></p>
-              <p className="price-desc">Para PMEs com SDR + AE e meta clara de crescimento.</p>
-              <ul className="price-feats">
-                <li><Icon name="check" size={14} />Até 10 usuários</li>
-                <li><Icon name="check" size={14} />3 instâncias com warmup paralelo</li>
-                <li><Icon name="check" size={14} />30.000 mensagens/mês</li>
-                <li><Icon name="check" size={14} />Campanhas em massa + segmentação</li>
-                <li><Icon name="check" size={14} />Fluxos ilimitados + handoff</li>
-                <li><Icon name="check" size={14} />Cadências SDR + round-robin</li>
-                <li><Icon name="check" size={14} />Forecast e win-rate</li>
-              </ul>
-              <Button variant="primary" onClick={() => goReal('/signup')}>Começar agora</Button>
-            </div>
-            <div className="price-card">
-              <h3 className="price-name">Scale</h3>
-              <p className="price-amount">R$ 1.297<small>/mês</small></p>
-              <p className="price-desc">Times maduros com múltiplos squads, marca e franquias.</p>
-              <ul className="price-feats">
-                <li><Icon name="check" size={14} />Usuários ilimitados</li>
-                <li><Icon name="check" size={14} />Instâncias ilimitadas + Cloud API Meta</li>
-                <li><Icon name="check" size={14} />200.000+ mensagens/mês</li>
-                <li><Icon name="check" size={14} />A/B testing em fluxos e campanhas</li>
-                <li><Icon name="check" size={14} />API & webhooks abertos</li>
-                <li><Icon name="check" size={14} />NPS, health score, CS</li>
-                <li><Icon name="check" size={14} />SSO + auditoria + DPA</li>
-              </ul>
-              <Button variant="secondary" onClick={() => goReal('/signup')}>Falar com vendas</Button>
-            </div>
+            {pricing.plans.map((plan, i) => {
+              const featured = i === 1;
+              return (
+                <div key={plan.name} className={featured ? 'price-card featured' : 'price-card'}>
+                  {featured && <span className="price-tag">{pricing.popular}</span>}
+                  <h3 className="price-name" style={featured ? { color: 'var(--brand-500)' } : undefined}>{plan.name}</h3>
+                  <p className="price-amount">{plan.price}<small>{pricing.perMonth}</small></p>
+                  <p className="price-desc">{plan.desc}</p>
+                  <ul className="price-feats">
+                    {plan.feats.map((f, j) => (
+                      <li key={j}><Icon name="check" size={14} />{f}</li>
+                    ))}
+                  </ul>
+                  <Button variant={featured ? 'primary' : 'secondary'} onClick={() => goReal('/signup')}>{plan.cta}</Button>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>

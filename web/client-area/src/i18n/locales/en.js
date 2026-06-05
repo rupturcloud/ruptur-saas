@@ -73,6 +73,20 @@ export const en = {
       faqKicker: 'Frequently asked questions',
       faqTitle: 'Clearing up the most common questions',
     },
+    pillars: [
+      { title: 'Multiple numbers with warmup', desc: 'Connect several numbers via uazapi, warm each one up gradually and blast without burning instances.', items: ['Automatic warmup in 7/14/30 days', 'Real-time health score per number', 'Smart anti-ban throttling'] },
+      { title: 'Broadcasts and conversational flows', desc: 'Send segmented mass campaigns and build chatbots that qualify, schedule and close 24/7.', items: ['Campaigns with segmentation and A/B', 'Visual flow builder with human handoff', 'Quick replies and approved templates'] },
+      { title: 'CRM with SDR automation', desc: 'Predictable pipeline, cadences, lead score and automatic assignment. Predictable Revenue in practice.', items: ['Seeds/Nets/Spears funnel', 'Round-robin SDR with <15min SLA', 'Weighted forecast and win-rate'] },
+    ],
+    pricing: {
+      perMonth: '/mo',
+      popular: 'Most popular',
+      plans: [
+        { name: 'Starter', price: 'R$ 197', desc: 'For teams starting to sell in a structured way.', cta: 'Start free', feats: ['Up to 3 users', '1 WhatsApp instance + warmup', 'Full CRM and pipeline', '5,000 messages/mo', 'Unified inbox', '1 conversational flow'] },
+        { name: 'Growth', price: 'R$ 497', desc: 'For SMBs with SDR + AE and a clear growth target.', cta: 'Start now', feats: ['Up to 10 users', '3 instances with parallel warmup', '30,000 messages/mo', 'Mass campaigns + segmentation', 'Unlimited flows + handoff', 'SDR cadences + round-robin', 'Forecast and win-rate'] },
+        { name: 'Scale', price: 'R$ 1,297', desc: 'Mature teams with multiple squads, brand and franchises.', cta: 'Talk to sales', feats: ['Unlimited users', 'Unlimited instances + Meta Cloud API', '200,000+ messages/mo', 'A/B testing in flows and campaigns', 'Open API & webhooks', 'NPS, health score, CS', 'SSO + audit + DPA'] },
+      ],
+    },
     ctaBand: {
       title: 'Ready to stop losing leads?',
       sub: 'Connect your WhatsApp in 4 minutes and see your funnel the same day.',

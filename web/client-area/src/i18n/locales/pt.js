@@ -73,6 +73,20 @@ export const pt = {
       faqKicker: 'Perguntas frequentes',
       faqTitle: 'Tirando as dúvidas mais comuns',
     },
+    pillars: [
+      { title: 'Múltiplos números com warmup', desc: 'Conecte vários chips via uazapi, aqueça cada número gradualmente e dispare sem queimar instância.', items: ['Warmup automático em 7/14/30 dias', 'Health score por número em tempo real', 'Throttling inteligente anti-ban'] },
+      { title: 'Disparos e fluxos conversacionais', desc: 'Mande campanhas segmentadas em massa e construa chatbots que qualificam, agendam e fecham 24/7.', items: ['Campanhas com segmentação e A/B', 'Flow builder visual com handoff humano', 'Respostas rápidas e templates aprovados'] },
+      { title: 'CRM com SDR automation', desc: 'Pipeline previsível, cadências, lead score e atribuição automática. Receita Previsível na prática.', items: ['Funil Seeds/Nets/Spears', 'Round-robin SDR com SLA <15min', 'Forecast ponderado e win-rate'] },
+    ],
+    pricing: {
+      perMonth: '/mês',
+      popular: 'Mais popular',
+      plans: [
+        { name: 'Starter', price: 'R$ 197', desc: 'Para times iniciando a vender de forma estruturada.', cta: 'Começar grátis', feats: ['Até 3 usuários', '1 instância WhatsApp + warmup', 'CRM e pipeline completos', '5.000 mensagens/mês', 'Inbox unificada', '1 fluxo conversacional'] },
+        { name: 'Growth', price: 'R$ 497', desc: 'Para PMEs com SDR + AE e meta clara de crescimento.', cta: 'Começar agora', feats: ['Até 10 usuários', '3 instâncias com warmup paralelo', '30.000 mensagens/mês', 'Campanhas em massa + segmentação', 'Fluxos ilimitados + handoff', 'Cadências SDR + round-robin', 'Forecast e win-rate'] },
+        { name: 'Scale', price: 'R$ 1.297', desc: 'Times maduros com múltiplos squads, marca e franquias.', cta: 'Falar com vendas', feats: ['Usuários ilimitados', 'Instâncias ilimitadas + Cloud API Meta', '200.000+ mensagens/mês', 'A/B testing em fluxos e campanhas', 'API & webhooks abertos', 'NPS, health score, CS', 'SSO + auditoria + DPA'] },
+      ],
+    },
     ctaBand: {
       title: 'Pronto para parar de perder lead?',
       sub: 'Conecte seu WhatsApp em 4 minutos e veja seu funil no mesmo dia.',
