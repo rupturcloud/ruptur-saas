@@ -1192,34 +1192,43 @@ function UazapiTab() {
 
 function WebhooksTab() {
   const endpoints = [
-    { event: 'whatsapp.message.received', url: '/api/v1/webhooks/wa/message', method: 'POST', active: true },
-    { event: 'whatsapp.qr.updated',       url: '/api/v1/webhooks/wa/qr',      method: 'POST', active: true },
-    { event: 'whatsapp.status.changed',   url: '/api/v1/webhooks/wa/status',  method: 'POST', active: true },
-    { event: 'billing.payment.confirmed', url: '/api/v1/webhooks/getnet',     method: 'POST', active: true },
+    { event: 'whatsapp.message.received', path: '/api/v1/webhooks/wa/message', group: 'WhatsApp (UAZAPI)' },
+    { event: 'whatsapp.qr.updated',       path: '/api/v1/webhooks/wa/qr',      group: 'WhatsApp (UAZAPI)' },
+    { event: 'whatsapp.status.changed',   path: '/api/v1/webhooks/wa/status',  group: 'WhatsApp (UAZAPI)' },
+    { event: 'billing.payment.confirmed', path: '/api/v1/webhooks/getnet',     group: 'Billing (Getnet)' },
   ];
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://ruptur.cloud';
+  const [copied, setCopied] = useState(null);
+  const copy = (url) => { navigator.clipboard?.writeText(url); setCopied(url); setTimeout(() => setCopied(null), 1500); };
 
   return (
     <div>
-      <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 15, marginBottom: 16 }}>Webhooks registrados</div>
+      <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 15, marginBottom: 6 }}>Webhooks de entrada</div>
+      <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 16 }}>
+        URLs que os provedores externos chamam. Copie e configure no painel do UAZAPI / Getnet.
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {endpoints.map(ep => (
-          <div key={ep.event} style={{
-            border: '1px solid var(--ink-150)', borderRadius: 10, padding: '12px 16px',
-            display: 'flex', alignItems: 'center', gap: 14,
-          }}>
-            <span style={{
-              fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
-              background: '#dbeafe', color: '#1d4ed8', fontFamily: 'monospace',
-            }}>{ep.method}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-900)' }}>{ep.event}</div>
-              <div style={{ fontSize: 12, color: 'var(--ink-500)', fontFamily: 'monospace', marginTop: 2 }}>{ep.url}</div>
+        {endpoints.map(ep => {
+          const full = origin + ep.path;
+          return (
+            <div key={ep.event} style={{ border: '1px solid var(--ink-150)', borderRadius: 10, padding: '12px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: 'var(--ink-100)', color: 'var(--ink-600)' }}>{ep.group}</span>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-900)', flex: 1 }}>{ep.event}</div>
+                <span style={{ display: 'flex', alignItems: 'center', fontSize: 12, fontWeight: 600, color: '#22c55e' }}>{dot('#22c55e')}Ativo</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--ink-50)', borderRadius: 8, padding: '7px 10px' }}>
+                <code style={{ flex: 1, fontSize: 12, color: 'var(--ink-700)', fontFamily: 'monospace', wordBreak: 'break-all' }}>{full}</code>
+                <button onClick={() => copy(full)} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--ink-200)', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', color: copied === full ? '#22c55e' : 'var(--ink-600)', whiteSpace: 'nowrap' }}>
+                  {copied === full ? '✓ Copiado' : 'Copiar'}
+                </button>
+              </div>
             </div>
-            <span style={{ display: 'flex', alignItems: 'center', fontSize: 12, fontWeight: 600, color: '#22c55e' }}>
-              {dot('#22c55e')}Ativo
-            </span>
-          </div>
-        ))}
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 10, background: 'var(--ink-50)', border: '1px solid var(--ink-150)', fontSize: 12, color: 'var(--ink-600)' }}>
+        Webhooks de <strong>entrada</strong> são fixos do sistema (recebem eventos dos provedores). Webhooks de <strong>saída</strong> (notificar sistemas externos) ainda não são configuráveis pela UI.
       </div>
     </div>
   );
