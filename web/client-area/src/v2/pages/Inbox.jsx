@@ -23,6 +23,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { PageHeader } from '../../ds/index.js';
 import { inboxApi } from '../../api/inbox.api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { useInboxBadge } from '../../contexts/InboxBadgeContext.jsx';
 
 // ---------------------------------------------------------------------------
 // Estilos — escopo local, paleta V0 (var(--ink-*) clara + thread escuro WhatsApp)
@@ -515,6 +516,7 @@ function Bubble({ msg }) {
 // ---------------------------------------------------------------------------
 export default function Inbox() {
   const { authReady, user, tenantId } = useAuth();
+  const { setUnread } = useInboxBadge();
   const userId = user?.id || null;
 
   // Instâncias
@@ -598,9 +600,11 @@ export default function Inbox() {
       const res = await inboxApi.findChats(instanceKey, { filters, limit: 60 });
       const rows = res.chats || [];
       if (res.freeTrialExpired || res.error === 'INSTANCE_EXPIRED') {
-        setInstanceExpired(true); setChats([]);
+        setInstanceExpired(true); setChats([]); setUnread(0);
       } else {
         setChats(rows);
+        // Badge dinâmico da sidebar: soma de conversas não-lidas da instância atual
+        setUnread(rows.reduce((s, c) => s + (c.wa_unreadCount || 0), 0));
       }
     } catch (e) {
       console.warn('[Inbox] findChats falhou:', e.message);
@@ -608,7 +612,7 @@ export default function Inbox() {
     } finally {
       if (!silent) setChatsLoading(false);
     }
-  }, [instanceKey, tab, activeLabel, groupsOnly, userId]);
+  }, [instanceKey, tab, activeLabel, groupsOnly, userId, setUnread]);
 
   const loadMessages = useCallback(async (chat, silent) => {
     if (!instanceKey || !chat) return;

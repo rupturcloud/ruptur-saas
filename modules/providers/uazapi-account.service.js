@@ -378,10 +378,20 @@ export class UazapiAccountService {
 
   async recordEvent(providerAccountId, eventType, payload = {}) {
     if (!providerAccountId) return;
-    await this.supabase
-      .from('provider_account_events')
-      .insert({ provider_account_id: providerAccountId, actor_user_id: payload.actorUserId || null, tenant_id: payload.tenantId || null, instance_registry_id: payload.registryId || null, event_type: eventType, details: payload })
-      .throwOnError?.();
+    // Auditoria best-effort — nunca deve quebrar o fluxo principal (sync/criação).
+    // Campos extras (tenant/instance/actor) vão no details para não depender de
+    // colunas específicas de provider_account_events (que variam no schema).
+    try {
+      await this.supabase
+        .from('provider_account_events')
+        .insert({
+          provider_account_id: providerAccountId,
+          event_type: eventType,
+          details: { ...payload, tenantId: payload.tenantId || null, actorUserId: payload.actorUserId || null, registryId: payload.registryId || null },
+        });
+    } catch (e) {
+      console.warn('[provider] recordEvent falhou (não-crítico):', e && e.message);
+    }
   }
 }
 
