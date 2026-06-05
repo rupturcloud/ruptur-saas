@@ -113,6 +113,16 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let isMounted = true;
 
+    // Failsafe: nunca deixa o app preso em "Carregando..." eternamente. Se o
+    // bootstrap não finalizar em 8s (endpoint pendurado, rede lenta, query que
+    // não resolve), libera a UI mesmo assim. finishInitialAuth é idempotente.
+    const bootstrapFailsafe = setTimeout(() => {
+      if (isMounted && !bootstrappedRef.current) {
+        console.warn('[Auth] Failsafe: bootstrap não finalizou em 8s — liberando UI');
+        finishInitialAuth();
+      }
+    }, 8000);
+
     async function initializeSession() {
       setLoading(true);
 
@@ -172,23 +182,31 @@ export function AuthProvider({ children }) {
             if (newSession.access_token) {
               await checkPlatformAdmin(newSession.access_token);
             }
-            if (isInitialAuthEvent) finishInitialAuth();
           } else {
             setTenant(null);
             setIsPlatformAdmin(false);
-            if (isInitialAuthEvent) finishInitialAuth();
           }
         } catch (err) {
           console.error('[Auth] Erro ao processar mudança de sessão:', err);
           setTenant(null);
           setIsPlatformAdmin(false);
-          if (isInitialAuthEvent) finishInitialAuth();
+        } finally {
+          // BUG FIX (login preso em "Carregando..."): o loading precisa SEMPRE
+          // ser finalizado. Antes, finishInitialAuth() só rodava no evento inicial,
+          // então após um signIn() subsequente (página já bootstrapped) o loading
+          // setado por signIn() ficava preso em true para sempre — tela eterna.
+          if (isInitialAuthEvent) {
+            finishInitialAuth();
+          } else {
+            setLoading(false);
+          }
         }
       }
     );
 
     return () => {
       isMounted = false;
+      clearTimeout(bootstrapFailsafe);
       subscription.unsubscribe();
     };
   }, [fetchTenant, checkPlatformAdmin, finishInitialAuth]);
