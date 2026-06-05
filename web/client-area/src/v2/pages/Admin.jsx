@@ -14,9 +14,9 @@ import {
 } from '../../ds/index.js';
 import { useToast } from '../../ds/toast.js';
 import { useT, useI18n } from '../../i18n/index.jsx';
-import { supabase } from '../../services/supabase';
 import { providerApi } from '../../api/admin.api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { supabase } from '../../services/supabase.js';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -66,6 +66,10 @@ function UsersTab() {
   const [actionState, setActionState] = useState({});
   const [roleOpen, setRoleOpen] = useState(null);
   const [loadError, setLoadError] = useState(null);   // erro do fetch de membros (diagnóstico)
+  const [inviteOpen, setInviteOpen] = useState(false);   // painel de convite (CREATE)
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('member');
+  const [inviteState, setInviteState] = useState(null);  // null | 'saving' | 'ok' | 'err:...'
 
   // Selecionar tenant inicial a partir do AuthContext (sem chamar API)
   useEffect(() => {
@@ -108,10 +112,10 @@ function UsersTab() {
 
   useEffect(() => { loadMembers(); }, [loadMembers]);
 
-  const doAction = async (userId, url, body = null) => {
+  const doAction = async (userId, url, body = null, method = 'POST') => {
     setActionState(s => ({ ...s, [userId]: 'saving' }));
     try {
-      const opts = { method: 'POST', headers: h };
+      const opts = { method, headers: h };
       if (body) opts.body = JSON.stringify(body);
       const res = await fetch(url, opts);
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
@@ -129,6 +133,33 @@ function UsersTab() {
   };
   const confirmEmail  = (userId) => doAction(userId, `/api/admin/platform/users/${userId}/confirm-email`);
   const resetPassword = (userId) => doAction(userId, `/api/admin/platform/users/${userId}/reset-password`);
+
+  // DELETE — remover membro do tenant (endpoint platform; a conta no Auth permanece)
+  const removeMember = (userId, email) => {
+    setRoleOpen(null);
+    if (typeof window !== 'undefined' &&
+        !window.confirm(`Remover ${email} deste tenant?\n\nO usuário perde o acesso a este workspace (a conta de login permanece).`)) return;
+    doAction(userId, `/api/admin/platform/tenants/${selectedId}/members/${userId}`, null, 'DELETE');
+  };
+
+  // CREATE — convidar/adicionar membro (cria no Auth se não existir + vincula ao tenant)
+  const addMember = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !email.includes('@')) { setInviteState('err:Informe um e-mail válido'); return; }
+    if (!selectedId) { setInviteState('err:Nenhum tenant selecionado'); return; }
+    setInviteState('saving');
+    try {
+      const res = await fetch(`/api/admin/platform/tenants/${selectedId}/members`, {
+        method: 'POST', headers: h, body: JSON.stringify({ email, role: inviteRole }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
+      setInviteState('ok');
+      setInviteEmail('');
+      setTimeout(() => { setInviteState(null); setInviteOpen(false); loadMembers(); }, 1000);
+    } catch (e) {
+      setInviteState('err:' + e.message);
+    }
+  };
 
   // Nome do tenant exibido
   const displayTenant = allTenants.find(t => t.id === selectedId) || tenant;
@@ -178,7 +209,58 @@ function UsersTab() {
         <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 15 }}>
           Equipe · {loading ? '...' : members.length} membro{members.length !== 1 ? 's' : ''}
         </div>
+        <button
+          onClick={() => { setInviteOpen(o => !o); setInviteState(null); }}
+          disabled={!selectedId}
+          style={{
+            padding: '7px 14px', borderRadius: 8, border: 'none', cursor: selectedId ? 'pointer' : 'not-allowed',
+            background: 'var(--brand-500)', color: '#fff', fontSize: 13, fontWeight: 600, opacity: selectedId ? 1 : 0.5,
+          }}
+        >
+          {inviteOpen ? '✕ Cancelar' : '+ Adicionar membro'}
+        </button>
       </div>
+
+      {/* Painel de convite (CREATE) */}
+      {inviteOpen && (
+        <div style={{
+          display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end',
+          padding: 14, marginBottom: 14, borderRadius: 10,
+          background: 'var(--ink-50)', border: '1px solid var(--ink-150)',
+        }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>E-mail do novo membro</label>
+            <input
+              type="email" value={inviteEmail}
+              onChange={e => { setInviteEmail(e.target.value); setInviteState(null); }}
+              onKeyDown={e => e.key === 'Enter' && addMember()}
+              placeholder="pessoa@empresa.com" autoFocus
+              style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--ink-200)', fontSize: 13 }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>Papel</label>
+            <select
+              value={inviteRole} onChange={e => setInviteRole(e.target.value)}
+              style={{ padding: '9px 11px', borderRadius: 8, border: '1px solid var(--ink-200)', fontSize: 13, background: '#fff' }}
+            >
+              {ROLE_OPTS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <button
+            onClick={addMember} disabled={inviteState === 'saving'}
+            style={{
+              padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+              background: 'var(--brand-500)', color: '#fff', fontSize: 13, fontWeight: 600,
+              opacity: inviteState === 'saving' ? 0.6 : 1,
+            }}
+          >
+            {inviteState === 'saving' ? 'Adicionando...' : 'Adicionar'}
+          </button>
+          {inviteState === 'ok' && <span style={{ color: '#22c55e', fontSize: 12, fontWeight: 600 }}>✓ Adicionado</span>}
+          {inviteState?.startsWith('err:') && <span style={{ color: '#ef4444', fontSize: 12 }}>{inviteState.slice(4)}</span>}
+        </div>
+      )}
 
       {/* Selector de tenant (só super admin vê todos) */}
       {isPlatformAdmin && allTenants.length > 1 && (
@@ -323,6 +405,16 @@ function UsersTab() {
                           }}
                         >
                           Reset senha
+                        </button>
+                        <button
+                          onClick={() => removeMember(m.user_id, m.email)}
+                          style={{
+                            padding: '4px 10px', borderRadius: 6, border: '1px solid #fecaca',
+                            background: 'rgba(239,68,68,.06)', color: '#dc2626', fontSize: 11,
+                            fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          Remover
                         </button>
                       </div>
                     )}
@@ -1101,35 +1193,698 @@ function UazapiTab() {
 
 function WebhooksTab() {
   const endpoints = [
-    { event: 'whatsapp.message.received', url: '/api/v1/webhooks/wa/message', method: 'POST', active: true },
-    { event: 'whatsapp.qr.updated',       url: '/api/v1/webhooks/wa/qr',      method: 'POST', active: true },
-    { event: 'whatsapp.status.changed',   url: '/api/v1/webhooks/wa/status',  method: 'POST', active: true },
-    { event: 'billing.payment.confirmed', url: '/api/v1/webhooks/getnet',     method: 'POST', active: true },
+    { event: 'whatsapp.message.received', path: '/api/v1/webhooks/wa/message', group: 'WhatsApp (UAZAPI)' },
+    { event: 'whatsapp.qr.updated',       path: '/api/v1/webhooks/wa/qr',      group: 'WhatsApp (UAZAPI)' },
+    { event: 'whatsapp.status.changed',   path: '/api/v1/webhooks/wa/status',  group: 'WhatsApp (UAZAPI)' },
+    { event: 'billing.payment.confirmed', path: '/api/v1/webhooks/getnet',     group: 'Billing (Getnet)' },
   ];
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://ruptur.cloud';
+  const [copied, setCopied] = useState(null);
+  const copy = (url) => { navigator.clipboard?.writeText(url); setCopied(url); setTimeout(() => setCopied(null), 1500); };
 
   return (
     <div>
-      <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 15, marginBottom: 16 }}>Webhooks registrados</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {endpoints.map(ep => (
-          <div key={ep.event} style={{
-            border: '1px solid var(--ink-150)', borderRadius: 10, padding: '12px 16px',
-            display: 'flex', alignItems: 'center', gap: 14,
-          }}>
-            <span style={{
-              fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
-              background: '#dbeafe', color: '#1d4ed8', fontFamily: 'monospace',
-            }}>{ep.method}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-900)' }}>{ep.event}</div>
-              <div style={{ fontSize: 12, color: 'var(--ink-500)', fontFamily: 'monospace', marginTop: 2 }}>{ep.url}</div>
-            </div>
-            <span style={{ display: 'flex', alignItems: 'center', fontSize: 12, fontWeight: 600, color: '#22c55e' }}>
-              {dot('#22c55e')}Ativo
-            </span>
-          </div>
-        ))}
+      <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 15, marginBottom: 6 }}>Webhooks de entrada</div>
+      <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 16 }}>
+        URLs que os provedores externos chamam. Copie e configure no painel do UAZAPI / Getnet.
       </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {endpoints.map(ep => {
+          const full = origin + ep.path;
+          return (
+            <div key={ep.event} style={{ border: '1px solid var(--ink-150)', borderRadius: 10, padding: '12px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: 'var(--ink-100)', color: 'var(--ink-600)' }}>{ep.group}</span>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-900)', flex: 1 }}>{ep.event}</div>
+                <span style={{ display: 'flex', alignItems: 'center', fontSize: 12, fontWeight: 600, color: '#22c55e' }}>{dot('#22c55e')}Ativo</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--ink-50)', borderRadius: 8, padding: '7px 10px' }}>
+                <code style={{ flex: 1, fontSize: 12, color: 'var(--ink-700)', fontFamily: 'monospace', wordBreak: 'break-all' }}>{full}</code>
+                <button onClick={() => copy(full)} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--ink-200)', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', color: copied === full ? '#22c55e' : 'var(--ink-600)', whiteSpace: 'nowrap' }}>
+                  {copied === full ? '✓ Copiado' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 10, background: 'var(--ink-50)', border: '1px solid var(--ink-150)', fontSize: 12, color: 'var(--ink-600)' }}>
+        Webhooks de <strong>entrada</strong> são fixos do sistema (recebem eventos dos provedores). Webhooks de <strong>saída</strong> (notificar sistemas externos) ainda não são configuráveis pela UI.
+      </div>
+    </div>
+  );
+}
+
+// ─── Aba: Workspace (CRUD do tenant) ──────────────────────────────────────────
+
+const PLAN_OPTS = ['free', 'starter', 'pro', 'business', 'enterprise'];
+const STATUS_OPTS = ['active', 'trial', 'suspended', 'cancelled'];
+const wsInput = { width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--ink-200)', fontSize: 13, background: '#fff', boxSizing: 'border-box', color: 'var(--ink-900)' };
+
+function WsField({ label, children }) {
+  return (
+    <label style={{ display: 'block' }}>
+      <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function WorkspaceTab() {
+  const { session, tenant, isPlatformAdmin } = useAuth();
+  const h = { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' };
+
+  const [allTenants, setAllTenants] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [form, setForm] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);   // { type:'ok'|'err', text }
+
+  useEffect(() => { if (tenant?.id) setSelectedId((p) => p || tenant.id); }, [tenant?.id]);
+
+  useEffect(() => {
+    if (!isPlatformAdmin || !session?.access_token) return;
+    fetch('/api/admin/platform/tenants', { headers: h })
+      .then(r => r.ok ? r.json() : { tenants: [] })
+      .then(d => setAllTenants(d.tenants || []));
+  }, [isPlatformAdmin, session?.access_token]);
+
+  useEffect(() => { if (!selectedId && allTenants.length > 0) setSelectedId(allTenants[0].id); }, [selectedId, allTenants]);
+
+  const load = useCallback(() => {
+    if (!selectedId || !session?.access_token) return;
+    setLoading(true); setMsg(null);
+    fetch(`/api/admin/platform/tenants/${selectedId}`, { headers: h })
+      .then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Erro ${r.status}`); return r.json(); })
+      .then(d => setForm(d.tenant || null))
+      .catch(e => { setForm(null); setMsg({ type: 'err', text: e.message }); })
+      .finally(() => setLoading(false));
+  }, [selectedId, session?.access_token]);
+  useEffect(() => { load(); }, [load]);
+
+  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const save = async () => {
+    if (!form) return;
+    setSaving(true); setMsg(null);
+    try {
+      const payload = {
+        name: form.name, email: form.email, plan: form.plan, status: form.status,
+        max_instances: form.max_instances === '' || form.max_instances == null ? null : Number(form.max_instances),
+        monthly_credits: form.monthly_credits === '' || form.monthly_credits == null ? null : Number(form.monthly_credits),
+      };
+      const res = await fetch(`/api/admin/platform/tenants/${selectedId}`, { method: 'PATCH', headers: h, body: JSON.stringify(payload) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
+      setMsg({ type: 'ok', text: 'Workspace atualizado com sucesso.' });
+      load();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setSaving(false); }
+  };
+
+  const suspend = async () => {
+    if (typeof window !== 'undefined' &&
+        !window.confirm(`Suspender o workspace "${form?.name}"?\n\nOs usuários perdem o acesso até você reativar (mude o status de volta para "active").`)) return;
+    setSaving(true); setMsg(null);
+    try {
+      const res = await fetch(`/api/admin/platform/tenants/${selectedId}`, { method: 'DELETE', headers: h });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
+      setMsg({ type: 'ok', text: 'Workspace suspenso.' });
+      load();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      {/* Seletor de tenant (super admin) */}
+      {isPlatformAdmin && allTenants.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+          {allTenants.map(t => (
+            <button key={t.id} onClick={() => setSelectedId(t.id)}
+              style={{
+                padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                background: selectedId === t.id ? 'var(--brand-500)' : 'var(--ink-100)',
+                color: selectedId === t.id ? '#fff' : 'var(--ink-600)',
+                border: `1px solid ${selectedId === t.id ? 'var(--brand-500)' : 'var(--ink-200)'}`,
+              }}>
+              {t.name || t.slug}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {loading && <div style={{ padding: 24, color: 'var(--ink-400)' }}>Carregando workspace...</div>}
+      {!loading && !form && <div style={{ padding: 24, color: 'var(--ink-400)' }}>Nenhum workspace disponível.</div>}
+
+      {!loading && form && (
+        <div style={{ maxWidth: 560 }}>
+          {/* Metadados imutáveis */}
+          <div style={{ display: 'flex', gap: 20, marginBottom: 20, padding: '12px 14px', borderRadius: 10, background: 'var(--ink-50)', border: '1px solid var(--ink-150)', fontSize: 12, color: 'var(--ink-500)', flexWrap: 'wrap' }}>
+            <span>Slug: <strong style={{ color: 'var(--ink-800)' }}>{form.slug || '—'}</strong></span>
+            <span>ID: <strong style={{ color: 'var(--ink-800)' }}>{form.id?.slice(0, 8)}…</strong></span>
+            <span>Criado: <strong style={{ color: 'var(--ink-800)' }}>{form.created_at ? new Date(form.created_at).toLocaleDateString('pt-BR') : '—'}</strong></span>
+            <span>Saldo: <strong style={{ color: 'var(--ink-800)' }}>{Number(form.credits_balance || 0).toLocaleString('pt-BR')} cr</strong></span>
+          </div>
+
+          {/* Campos editáveis */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <WsField label="Nome do workspace"><input value={form.name || ''} onChange={e => setField('name', e.target.value)} style={wsInput} /></WsField>
+            <WsField label="E-mail de contato"><input type="email" value={form.email || ''} onChange={e => setField('email', e.target.value)} style={wsInput} /></WsField>
+            <WsField label="Plano"><select value={form.plan || 'free'} onChange={e => setField('plan', e.target.value)} style={wsInput}>{PLAN_OPTS.map(p => <option key={p} value={p}>{p}</option>)}</select></WsField>
+            <WsField label="Status"><select value={form.status || 'active'} onChange={e => setField('status', e.target.value)} style={wsInput}>{STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}</select></WsField>
+            <WsField label="Máx. instâncias"><input type="number" min="0" value={form.max_instances ?? ''} onChange={e => setField('max_instances', e.target.value)} style={wsInput} /></WsField>
+            <WsField label="Créditos mensais"><input type="number" min="0" value={form.monthly_credits ?? ''} onChange={e => setField('monthly_credits', e.target.value)} style={wsInput} /></WsField>
+          </div>
+
+          {msg && (
+            <div style={{
+              marginTop: 16, padding: '10px 14px', borderRadius: 8, fontSize: 13,
+              background: msg.type === 'ok' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)',
+              color: msg.type === 'ok' ? '#16a34a' : '#dc2626',
+              border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'}`,
+            }}>{msg.text}</div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button onClick={save} disabled={saving}
+              style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'var(--brand-500)', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+              {saving ? 'Salvando...' : 'Salvar alterações'}
+            </button>
+            <button onClick={suspend} disabled={saving || form.status === 'suspended'}
+              style={{ padding: '10px 16px', borderRadius: 9, border: '1px solid #fecaca', background: 'rgba(239,68,68,.06)', color: '#dc2626', fontWeight: 600, fontSize: 13, cursor: (saving || form.status === 'suspended') ? 'not-allowed' : 'pointer', opacity: (saving || form.status === 'suspended') ? 0.5 : 1 }}>
+              {form.status === 'suspended' ? 'Já suspenso' : 'Suspender workspace'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Aba: Permissões (super admins da plataforma) ─────────────────────────────
+
+function PermissionsTab() {
+  const { session, isPlatformAdmin } = useAuth();
+  const h = { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' };
+
+  const [admins, setAdmins] = useState([]);
+  const [invites, setInvites] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [lastInviteUrl, setLastInviteUrl] = useState(null);
+
+  const load = useCallback(() => {
+    if (!session?.access_token || !isPlatformAdmin) return;
+    setLoading(true); setMsg(null);
+    Promise.all([
+      fetch('/api/admin/platform/admins', { headers: h }).then(r => r.ok ? r.json() : { data: [] }),
+      fetch('/api/admin/platform/invites', { headers: h }).then(r => r.ok ? r.json() : { invites: [] }),
+    ]).then(([a, i]) => { setAdmins(a.data || []); setInvites(i.invites || []); })
+      .catch(e => setMsg({ type: 'err', text: e.message }))
+      .finally(() => setLoading(false));
+  }, [session?.access_token, isPlatformAdmin]);
+  useEffect(() => { load(); }, [load]);
+
+  const invite = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !email.includes('@')) { setMsg({ type: 'err', text: 'Informe um e-mail válido' }); return; }
+    setBusy(true); setMsg(null); setLastInviteUrl(null);
+    try {
+      const res = await fetch('/api/admin/platform/invite', { method: 'POST', headers: h, body: JSON.stringify({ email }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
+      setMsg({ type: 'ok', text: body.message || 'Convite criado.' });
+      if (body.inviteUrl) setLastInviteUrl(body.inviteUrl);
+      setInviteEmail(''); setInviteOpen(false);
+      load();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (adminId, email) => {
+    if (typeof window !== 'undefined' && !window.confirm(`Remover o super admin ${email}?\n\nPerde o acesso de plataforma imediatamente.`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      const res = await fetch('/api/admin/platform/remove', { method: 'POST', headers: h, body: JSON.stringify({ adminId }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
+      setMsg({ type: 'ok', text: body.message || 'Super admin removido.' });
+      load();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setBusy(false); }
+  };
+
+  if (!isPlatformAdmin) {
+    return <div style={{ padding: 24, color: 'var(--ink-400)', textAlign: 'center' }}>Apenas super admins podem gerenciar permissões de plataforma.</div>;
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 15 }}>Super admins · {loading ? '...' : admins.length}</div>
+        <button onClick={() => { setInviteOpen(o => !o); setMsg(null); }}
+          style={{ padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--brand-500)', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+          {inviteOpen ? '✕ Cancelar' : '+ Convidar super admin'}
+        </button>
+      </div>
+
+      {inviteOpen && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', padding: 14, marginBottom: 14, borderRadius: 10, background: 'var(--ink-50)', border: '1px solid var(--ink-150)' }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>E-mail do novo super admin</label>
+            <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && invite()} placeholder="admin@empresa.com" autoFocus style={wsInput} />
+          </div>
+          <button onClick={invite} disabled={busy} style={{ padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--brand-500)', color: '#fff', fontSize: 13, fontWeight: 600, opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Enviando...' : 'Convidar'}
+          </button>
+        </div>
+      )}
+
+      {msg && <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, fontSize: 13, background: msg.type === 'ok' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)', color: msg.type === 'ok' ? '#16a34a' : '#dc2626', border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'}` }}>{msg.text}</div>}
+
+      {lastInviteUrl && (
+        <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, background: 'var(--ink-50)', border: '1px solid var(--ink-150)', fontSize: 12 }}>
+          <div style={{ color: 'var(--ink-500)', marginBottom: 5 }}>Link do convite (envie ao convidado):</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <code style={{ flex: 1, fontSize: 11, color: 'var(--ink-700)', wordBreak: 'break-all' }}>{lastInviteUrl}</code>
+            <button onClick={() => navigator.clipboard?.writeText(lastInviteUrl)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--ink-200)', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', color: 'var(--ink-600)' }}>Copiar</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ border: '1px solid var(--ink-150)', borderRadius: 10, overflow: 'hidden', marginBottom: 18 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead><tr style={{ background: 'var(--ink-50)' }}>
+            {['E-MAIL', 'STATUS', 'DESDE', 'AÇÕES'].map(c => <th key={c} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, fontSize: 11, color: 'var(--ink-500)' }}>{c}</th>)}
+          </tr></thead>
+          <tbody>
+            {loading && <tr><td colSpan={4} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-400)' }}>Carregando...</td></tr>}
+            {!loading && admins.length === 0 && <tr><td colSpan={4} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-400)' }}>Nenhum super admin.</td></tr>}
+            {!loading && admins.map((a, i) => (
+              <tr key={a.id || a.user_id} style={{ borderTop: i > 0 ? '1px solid var(--ink-100)' : 'none' }}>
+                <td style={{ padding: '12px 16px', color: 'var(--ink-900)', fontWeight: 500 }}>{a.email}</td>
+                <td style={{ padding: '12px 16px' }}><span style={{ color: a.status === 'active' ? '#22c55e' : '#f59e0b', fontWeight: 600 }}>{a.status || 'active'}</span></td>
+                <td style={{ padding: '12px 16px', color: 'var(--ink-500)', fontSize: 12 }}>{a.created_at ? new Date(a.created_at).toLocaleDateString('pt-BR') : '—'}</td>
+                <td style={{ padding: '12px 16px' }}>
+                  <button onClick={() => remove(a.id || a.user_id, a.email)} disabled={busy}
+                    style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #fecaca', background: 'rgba(239,68,68,.06)', color: '#dc2626', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                    Remover
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {invites.length > 0 && (
+        <div>
+          <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 14, marginBottom: 10 }}>Convites pendentes · {invites.length}</div>
+          <div style={{ border: '1px solid var(--ink-150)', borderRadius: 10, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <tbody>
+                {invites.map((inv, i) => (
+                  <tr key={inv.id || i} style={{ borderTop: i > 0 ? '1px solid var(--ink-100)' : 'none' }}>
+                    <td style={{ padding: '10px 16px', color: 'var(--ink-700)' }}>{inv.email}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--ink-400)', fontSize: 12 }}>{inv.expires_at ? 'expira ' + new Date(inv.expires_at).toLocaleDateString('pt-BR') : 'pendente'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Aba: Cobrança (billing + créditos + audit) ───────────────────────────────
+
+function BillCard({ label, value, accent }) {
+  return (
+    <div style={{ padding: '14px 16px', borderRadius: 10, background: 'var(--ink-0)', border: '1px solid var(--ink-150)' }}>
+      <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: accent ? 'var(--brand-600)' : 'var(--ink-900)' }}>{value}</div>
+    </div>
+  );
+}
+
+function BillingTab() {
+  const { session, tenant, isPlatformAdmin } = useAuth();
+  const h = { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' };
+
+  const [allTenants, setAllTenants] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [billing, setBilling] = useState(null);
+  const [audit, setAudit] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [creditAmount, setCreditAmount] = useState('');
+  const [creditDesc, setCreditDesc] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => { if (tenant?.id) setSelectedId(p => p || tenant.id); }, [tenant?.id]);
+  useEffect(() => {
+    if (!isPlatformAdmin || !session?.access_token) return;
+    fetch('/api/admin/platform/tenants', { headers: h }).then(r => r.ok ? r.json() : { tenants: [] }).then(d => setAllTenants(d.tenants || []));
+  }, [isPlatformAdmin, session?.access_token]);
+  useEffect(() => { if (!selectedId && allTenants.length > 0) setSelectedId(allTenants[0].id); }, [selectedId, allTenants]);
+
+  const load = useCallback(() => {
+    if (!selectedId || !session?.access_token) return;
+    setLoading(true); setMsg(null);
+    Promise.all([
+      fetch(`/api/admin/tenants/${selectedId}/billing`, { headers: h }).then(r => r.ok ? r.json() : null),
+      fetch(`/api/admin/tenants/${selectedId}/audit?limit=20`, { headers: h }).then(r => r.ok ? r.json() : { logs: [] }),
+    ]).then(([b, a]) => { setBilling(b?.data || null); setAudit(a?.logs || []); })
+      .catch(e => setMsg({ type: 'err', text: e.message }))
+      .finally(() => setLoading(false));
+  }, [selectedId, session?.access_token]);
+  useEffect(() => { load(); }, [load]);
+
+  const addCredits = async () => {
+    const amount = Number(creditAmount);
+    if (!Number.isFinite(amount) || amount <= 0) { setMsg({ type: 'err', text: 'Quantidade de créditos deve ser positiva' }); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const res = await fetch('/api/admin/credits', { method: 'POST', headers: h, body: JSON.stringify({ tenantId: selectedId, amount, description: creditDesc.trim() || 'Crédito administrativo' }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
+      setMsg({ type: 'ok', text: `+${amount} créditos adicionados.` });
+      setCreditAmount(''); setCreditDesc('');
+      load();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div>
+      {isPlatformAdmin && allTenants.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+          {allTenants.map(t => (
+            <button key={t.id} onClick={() => setSelectedId(t.id)} style={{ padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: selectedId === t.id ? 'var(--brand-500)' : 'var(--ink-100)', color: selectedId === t.id ? '#fff' : 'var(--ink-600)', border: `1px solid ${selectedId === t.id ? 'var(--brand-500)' : 'var(--ink-200)'}` }}>{t.name || t.slug}</button>
+          ))}
+        </div>
+      )}
+
+      {loading && <div style={{ padding: 24, color: 'var(--ink-400)' }}>Carregando cobrança...</div>}
+
+      {!loading && billing && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginBottom: 20 }}>
+            <BillCard label="Plano" value={billing.plan || '—'} />
+            <BillCard label="Saldo de créditos" value={Number(billing.creditsBalance || 0).toLocaleString('pt-BR')} accent />
+            <BillCard label="Créditos mensais" value={Number(billing.monthlyCredits || 0).toLocaleString('pt-BR')} />
+            <BillCard label="Trial" value={billing.trialEndsAt ? (billing.isExpired ? 'Expirado' : new Date(billing.trialEndsAt).toLocaleDateString('pt-BR')) : '—'} />
+          </div>
+
+          {isPlatformAdmin && (
+            <div style={{ padding: 14, marginBottom: 20, borderRadius: 10, background: 'var(--ink-50)', border: '1px solid var(--ink-150)' }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-800)', marginBottom: 10 }}>Adicionar créditos manualmente</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div style={{ width: 140 }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>Quantidade</label>
+                  <input type="number" min="1" value={creditAmount} onChange={e => setCreditAmount(e.target.value)} placeholder="100" style={wsInput} />
+                </div>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>Descrição (opcional)</label>
+                  <input value={creditDesc} onChange={e => setCreditDesc(e.target.value)} placeholder="Bônus, ajuste manual, etc." style={wsInput} />
+                </div>
+                <button onClick={addCredits} disabled={busy} style={{ padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--brand-500)', color: '#fff', fontSize: 13, fontWeight: 600, opacity: busy ? 0.6 : 1 }}>{busy ? '...' : 'Adicionar'}</button>
+              </div>
+            </div>
+          )}
+
+          {msg && <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, fontSize: 13, background: msg.type === 'ok' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)', color: msg.type === 'ok' ? '#16a34a' : '#dc2626', border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'}` }}>{msg.text}</div>}
+
+          <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 14, marginBottom: 10 }}>Histórico de atividade · {audit.length}</div>
+          <div style={{ border: '1px solid var(--ink-150)', borderRadius: 10, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <tbody>
+                {audit.length === 0 && <tr><td style={{ padding: 18, textAlign: 'center', color: 'var(--ink-400)' }}>Sem registros de auditoria.</td></tr>}
+                {audit.map((l, i) => (
+                  <tr key={l.id || i} style={{ borderTop: i > 0 ? '1px solid var(--ink-100)' : 'none' }}>
+                    <td style={{ padding: '9px 16px', color: 'var(--ink-700)' }}>{l.action || l.event || l.type || '—'}</td>
+                    <td style={{ padding: '9px 16px', color: 'var(--ink-400)', fontSize: 12, textAlign: 'right' }}>{l.created_at ? new Date(l.created_at).toLocaleString('pt-BR') : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {!loading && !billing && <div style={{ padding: 24, color: 'var(--ink-400)' }}>{msg?.text || 'Nenhum dado de cobrança disponível.'}</div>}
+    </div>
+  );
+}
+
+// ─── Aba: Conta (perfil do usuário logado) ────────────────────────────────────
+
+function ContaTab() {
+  const { user, signOut } = useAuth();
+
+  const [fullName, setFullName] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [newPass2, setNewPass2] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPass, setSavingPass] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const { lang, setLang } = useI18n();
+  const tr = useT();
+
+  useEffect(() => {
+    setFullName(user?.user_metadata?.full_name || user?.user_metadata?.tenant_name || '');
+  }, [user?.id]);
+
+  const changeLanguage = async (l) => {
+    setLang(l);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { preferred_language: l } });
+      if (error) throw error;
+      setMsg({ type: 'ok', text: tr('app.account.saved') });
+    } catch (e) { setMsg({ type: 'err', text: e.message || tr('app.account.saveError') }); }
+  };
+
+  const saveProfile = async () => {
+    setSavingProfile(true); setMsg(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { full_name: fullName.trim() } });
+      if (error) throw error;
+      setMsg({ type: 'ok', text: 'Perfil atualizado.' });
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setSavingProfile(false); }
+  };
+
+  const savePassword = async () => {
+    if (newPass.length < 6) { setMsg({ type: 'err', text: 'A senha precisa de ao menos 6 caracteres' }); return; }
+    if (newPass !== newPass2) { setMsg({ type: 'err', text: 'As senhas não conferem' }); return; }
+    setSavingPass(true); setMsg(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPass });
+      if (error) throw error;
+      setMsg({ type: 'ok', text: 'Senha alterada com sucesso.' });
+      setNewPass(''); setNewPass2('');
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setSavingPass(false); }
+  };
+
+  if (!user) return <div style={{ padding: 24, color: 'var(--ink-400)' }}>Não autenticado.</div>;
+
+  return (
+    <div style={{ maxWidth: 520 }}>
+      <div style={{ display: 'flex', gap: 20, marginBottom: 20, padding: '12px 14px', borderRadius: 10, background: 'var(--ink-50)', border: '1px solid var(--ink-150)', fontSize: 12, color: 'var(--ink-500)', flexWrap: 'wrap' }}>
+        <span>E-mail: <strong style={{ color: 'var(--ink-800)' }}>{user.email}</strong></span>
+        <span>ID: <strong style={{ color: 'var(--ink-800)' }}>{user.id?.slice(0, 8)}…</strong></span>
+        <span>Criado: <strong style={{ color: 'var(--ink-800)' }}>{user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : '—'}</strong></span>
+        <span>Último acesso: <strong style={{ color: 'var(--ink-800)' }}>{user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString('pt-BR') : '—'}</strong></span>
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 10 }}>Perfil</div>
+        <div style={{ marginBottom: 12 }}><WsField label="Nome de exibição"><input value={fullName} onChange={e => setFullName(e.target.value)} style={wsInput} /></WsField></div>
+        <div style={{ marginBottom: 12 }}><WsField label="E-mail (alterar requer suporte)"><input value={user.email} disabled style={{ ...wsInput, background: 'var(--ink-50)', color: 'var(--ink-500)' }} /></WsField></div>
+        <button onClick={saveProfile} disabled={savingProfile} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: 'var(--brand-500)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: savingProfile ? 0.6 : 1 }}>
+          {savingProfile ? 'Salvando...' : 'Salvar perfil'}
+        </button>
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 10 }}>Alterar senha</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <WsField label="Nova senha"><input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} autoComplete="new-password" style={wsInput} /></WsField>
+          <WsField label="Confirmar senha"><input type="password" value={newPass2} onChange={e => setNewPass2(e.target.value)} autoComplete="new-password" style={wsInput} /></WsField>
+        </div>
+        <button onClick={savePassword} disabled={savingPass || !newPass} style={{ marginTop: 12, padding: '9px 18px', borderRadius: 9, border: 'none', background: 'var(--brand-500)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: (savingPass || !newPass) ? 'not-allowed' : 'pointer', opacity: (savingPass || !newPass) ? 0.6 : 1 }}>
+          {savingPass ? 'Alterando...' : 'Alterar senha'}
+        </button>
+      </div>
+
+      {msg && <div style={{ marginBottom: 18, padding: '10px 14px', borderRadius: 8, fontSize: 13, background: msg.type === 'ok' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)', color: msg.type === 'ok' ? '#16a34a' : '#dc2626', border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'}` }}>{msg.text}</div>}
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 10 }}>{tr('app.account.prefsTitle')}</div>
+        <WsField label={tr('app.account.language')}>
+          <select value={lang} onChange={e => changeLanguage(e.target.value)} style={wsInput}>
+            <option value="pt">🇧🇷 Português</option>
+            <option value="en">🇺🇸 English</option>
+            <option value="es">🇪🇸 Español</option>
+          </select>
+        </WsField>
+        <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 6 }}>{tr('app.account.languageHint')}</div>
+      </div>
+
+      <div style={{ paddingTop: 16, borderTop: '1px solid var(--ink-150)' }}>
+        <button onClick={signOut} style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid var(--ink-200)', background: '#fff', color: 'var(--ink-700)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+          Sair da conta
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Aba: Notificações (preferências via user_metadata) ───────────────────────
+
+const NOTIF_GROUPS = [
+  {
+    group: 'E-mail', items: [
+      { key: 'email_campaigns', label: 'Campanhas concluídas', desc: 'Resumo quando uma campanha termina' },
+      { key: 'email_system', label: 'Alertas de sistema', desc: 'Instância caiu, risco de bloqueio' },
+      { key: 'email_billing', label: 'Cobrança e créditos', desc: 'Créditos baixos, faturas, pagamentos' },
+      { key: 'email_weekly', label: 'Resumo semanal', desc: 'Métricas da semana por e-mail' },
+    ],
+  },
+  {
+    group: 'Push (navegador)', items: [
+      { key: 'push_inbox', label: 'Novas mensagens', desc: 'Notificação ao receber mensagem no inbox' },
+      { key: 'push_instances', label: 'Status de instâncias', desc: 'Quando um número conecta/desconecta' },
+    ],
+  },
+];
+const DEFAULT_PREFS = { email_campaigns: true, email_system: true, email_billing: true, email_weekly: false, push_inbox: true, push_instances: true };
+
+function NotifToggle({ checked, onChange }) {
+  return (
+    <button onClick={onChange} aria-pressed={checked} style={{ width: 40, height: 22, borderRadius: 999, border: 'none', cursor: 'pointer', padding: 2, background: checked ? 'var(--brand-500)' : 'var(--ink-200)', transition: 'background .15s', flexShrink: 0 }}>
+      <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', transform: checked ? 'translateX(18px)' : 'translateX(0)', transition: 'transform .15s' }} />
+    </button>
+  );
+}
+
+function NotificacoesTab() {
+  const { user } = useAuth();
+  const [prefs, setPrefs] = useState(DEFAULT_PREFS);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    const saved = user?.user_metadata?.notification_prefs;
+    if (saved) setPrefs(p => ({ ...DEFAULT_PREFS, ...saved }));
+  }, [user?.id]);
+
+  const toggle = (key) => { setPrefs(p => ({ ...p, [key]: !p[key] })); setMsg(null); };
+
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { notification_prefs: prefs } });
+      if (error) throw error;
+      setMsg({ type: 'ok', text: 'Preferências de notificação salvas.' });
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ maxWidth: 600 }}>
+      {NOTIF_GROUPS.map(g => (
+        <div key={g.group} style={{ marginBottom: 22 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 10 }}>{g.group}</div>
+          <div style={{ border: '1px solid var(--ink-150)', borderRadius: 10, overflow: 'hidden' }}>
+            {g.items.map((it, i) => (
+              <div key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', borderTop: i > 0 ? '1px solid var(--ink-100)' : 'none' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--ink-900)' }}>{it.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 2 }}>{it.desc}</div>
+                </div>
+                <NotifToggle checked={!!prefs[it.key]} onChange={() => toggle(it.key)} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {msg && <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, fontSize: 13, background: msg.type === 'ok' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)', color: msg.type === 'ok' ? '#16a34a' : '#dc2626', border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'}` }}>{msg.text}</div>}
+
+      <button onClick={save} disabled={saving} style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'var(--brand-500)', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+        {saving ? 'Salvando...' : 'Salvar preferências'}
+      </button>
+    </div>
+  );
+}
+
+// ─── Aba: Privacidade & LGPD ──────────────────────────────────────────────────
+
+function LgpdCard({ title, desc, children }) {
+  return (
+    <div style={{ border: '1px solid var(--ink-150)', borderRadius: 12, padding: 18, marginBottom: 14 }}>
+      <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 14, lineHeight: 1.5 }}>{desc}</div>
+      {children}
+    </div>
+  );
+}
+
+function LgpdTab() {
+  const { user, tenant } = useAuth();
+  const [exported, setExported] = useState(false);
+
+  const exportData = () => {
+    const data = {
+      exportadoEm: new Date().toISOString(),
+      usuario: {
+        id: user?.id, email: user?.email,
+        nome: user?.user_metadata?.full_name || null,
+        criadoEm: user?.created_at, ultimoAcesso: user?.last_sign_in_at,
+        preferenciasNotificacao: user?.user_metadata?.notification_prefs || null,
+      },
+      workspace: tenant ? { id: tenant.id, nome: tenant.name, slug: tenant.slug, plano: tenant.plan, papel: tenant.userRole } : null,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `ruptur-meus-dados-${user?.id?.slice(0, 8) || 'export'}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    setExported(true); setTimeout(() => setExported(false), 2500);
+  };
+
+  const requestDeletion = () => {
+    const subject = encodeURIComponent('Solicitação de exclusão de conta (LGPD)');
+    const body = encodeURIComponent(`Solicito a exclusão da minha conta e dados pessoais conforme a LGPD.\n\nE-mail: ${user?.email}\nID: ${user?.id}\nWorkspace: ${tenant?.name || '—'}\n\n(Estou ciente de que esta ação é irreversível.)`);
+    window.location.href = `mailto:suporte@ruptur.cloud?subject=${subject}&body=${body}`;
+  };
+
+  return (
+    <div style={{ maxWidth: 640 }}>
+      <LgpdCard title="Exportar meus dados" desc="Baixe uma cópia dos seus dados pessoais no Ruptur (perfil, workspace e preferências) em formato JSON — direito de acesso e portabilidade (LGPD Art. 18, II e V).">
+        <button onClick={exportData} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: 'var(--brand-500)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+          {exported ? '✓ Arquivo baixado' : 'Exportar dados (JSON)'}
+        </button>
+      </LgpdCard>
+
+      <LgpdCard title="Dados que coletamos" desc="Para operar o serviço, armazenamos: e-mail e nome de login; dados do workspace (nome, plano, créditos); números WhatsApp conectados e métricas de envio; mensagens processadas (inbox e campanhas). Não vendemos seus dados a terceiros.">
+        <div style={{ fontSize: 12, color: 'var(--ink-400)' }}>Tokens de provedores são criptografados (AES-256-GCM). Política completa em ruptur.cloud/privacidade.</div>
+      </LgpdCard>
+
+      <LgpdCard title="Excluir minha conta" desc="Direito ao esquecimento (LGPD Art. 18, VI). Ao solicitar, sua conta e dados pessoais serão removidos após confirmação. Esta ação é irreversível e encerra o acesso ao workspace.">
+        <button onClick={requestDeletion} style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid #fecaca', background: 'rgba(239,68,68,.06)', color: '#dc2626', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+          Solicitar exclusão da conta
+        </button>
+      </LgpdCard>
     </div>
   );
 }
@@ -1209,13 +1964,13 @@ function ComingSoonTab({ label }) {
 
 const TABS = [
   { id: 'users',       label: 'Usuários e papéis', component: UsersTab },
-  { id: 'workspace',   label: 'Workspace',          component: () => <ComingSoonTab label="Workspace" /> },
-  { id: 'conta',       label: 'Conta',              component: AccountTab },
-  { id: 'billing',     label: 'Cobrança',           component: () => <ComingSoonTab label="Cobrança" /> },
-  { id: 'notifs',      label: 'Notificações',       component: () => <ComingSoonTab label="Notificações" /> },
-  { id: 'lgpd',        label: 'Privacidade & LGPD', component: () => <ComingSoonTab label="Privacidade & LGPD" /> },
+  { id: 'workspace',   label: 'Workspace',          component: WorkspaceTab },
+  { id: 'conta',       label: 'Conta',              component: ContaTab },
+  { id: 'billing',     label: 'Cobrança',           component: BillingTab },
+  { id: 'notifs',      label: 'Notificações',       component: NotificacoesTab },
+  { id: 'lgpd',        label: 'Privacidade & LGPD', component: LgpdTab },
   { id: 'conectores',  label: 'Conectores',         component: ConnectorsTab },
-  { id: 'permissions', label: 'Permissões',         component: () => <ComingSoonTab label="Permissões" /> },
+  { id: 'permissions', label: 'Permissões',         component: PermissionsTab },
   { id: 'uazapi',      label: 'Instâncias uazapi',  component: UazapiTab },
   { id: 'webhooks',    label: 'Webhooks',           component: WebhooksTab },
 ];
