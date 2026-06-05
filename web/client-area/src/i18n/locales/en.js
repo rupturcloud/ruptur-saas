@@ -87,6 +87,16 @@ export const en = {
         { name: 'Scale', price: 'R$ 1,297', desc: 'Mature teams with multiple squads, brand and franchises.', cta: 'Talk to sales', feats: ['Unlimited users', 'Unlimited instances + Meta Cloud API', '200,000+ messages/mo', 'A/B testing in flows and campaigns', 'Open API & webhooks', 'NPS, health score, CS', 'SSO + audit + DPA'] },
       ],
     },
+    faq: [
+      { q: 'How does number warmup work?', a: 'When you connect a new instance via uazapi, Ruptur starts a controlled message pace (greetings between your own numbers, real-conversation simulation and gradual growth) for 7, 14 or 30 days. This builds reputation on WhatsApp and drastically reduces the ban risk before you start blasting.' },
+      { q: 'Can I send mass messages to my customers?', a: 'Yes. Campaigns use tag segmentation, lead score and pipeline stage. Throttling respects the health of each number — a freshly warmed instance sends fewer per hour than a mature one. Meta-approved templates pass freely, and free-form messages follow the 24h window rules.' },
+      { q: 'What are conversational flows?', a: 'A visual editor where you connect nodes (message, wait, condition, assign SDR, set tag, generate link). Use it to qualify new leads automatically, book meetings, answer FAQs and hand off to a human when needed.' },
+      { q: 'Do I need to use my personal WhatsApp number?', a: 'No. Ruptur connects, via uazapi, to dedicated numbers for your company — you can use new or existing chips. It works with WhatsApp Business and also with the official Cloud API (Meta) on the Scale plan. Your personal number stays protected.' },
+      { q: 'How many numbers can I connect and blast per day?', a: 'Starter: 1 number, ~300 msgs/day after warmup. Growth: 3 numbers, ~1,500 msgs/day. Scale: unlimited, ~10k+ msgs/day. The real limit depends on the health of each instance — mature numbers send more.' },
+      { q: 'Can I import leads from a spreadsheet or another CRM?', a: 'Yes. We accept CSV during onboarding and have importers for HubSpot, Pipedrive and RD Station. We map fields automatically and validate Brazilian phone formats.' },
+      { q: 'Is Ruptur LGPD compliant?', a: 'Yes. We host data in Brazil (AWS São Paulo), have a ready DPA, audit logs, on-demand anonymization and configurable retention per workspace. Automatic opt-out in campaigns.' },
+      { q: 'Do I need a credit card to start?', a: 'No. The 14-day trial is free and card-free. You only add a payment method at the end of the trial — we process via Getnet (Pix, card, boleto).' },
+    ],
     ctaBand: {
       title: 'Ready to stop losing leads?',
       sub: 'Connect your WhatsApp in 4 minutes and see your funnel the same day.',

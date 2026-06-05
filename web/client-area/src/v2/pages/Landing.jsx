@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, Button, SocialProofToasts } from '../../ds/index.js';
 import { useT } from '../../i18n/index.jsx';
+import LanguageSwitcher from '../../components/LanguageSwitcher.jsx';
 
 const LANDING_CSS = `
   .lp { background: var(--ink-0); min-height: 100vh; color: var(--ink-900); }
@@ -136,17 +137,9 @@ const LANDING_CSS = `
 `;
 
 function FAQ() {
+  const t = useT();
   const [open, setOpen] = useState(0);
-  const items = [
-    { q: 'Como o warmup de números funciona?', a: 'Quando você conecta uma nova instância via uazapi, o Ruptur inicia um ritmo controlado de mensagens (saudações entre números próprios, simulação de conversa real e crescimento gradual) por 7, 14 ou 30 dias. Isso constrói reputação no WhatsApp e reduz drasticamente o risco de banimento antes de você começar a disparar.' },
-    { q: 'Posso enviar mensagens em massa para meus clientes?', a: 'Sim. As campanhas usam segmentação de tags, lead score e estágio do pipeline. O throttling respeita a saúde de cada número — instância recém-aquecida envia menos por hora que uma madura. Templates aprovados pela Meta passam livremente, e mensagens livres seguem regras de janela de 24h.' },
-    { q: 'O que são os fluxos conversacionais?', a: 'É um editor visual onde você conecta nós (mensagem, espera, condição, atribui SDR, marca tag, gera link). Use para qualificar lead novo automaticamente, agendar reunião, responder dúvidas frequentes e fazer handoff para humano quando precisar.' },
-    { q: 'Preciso usar meu número pessoal de WhatsApp?', a: 'Não. A Ruptur conecta via uazapi a números dedicados da sua empresa — você pode usar chips novos ou existentes. Funciona com WhatsApp Business e também com Cloud API oficial (Meta) no plano Scale. Seu número pessoal continua protegido.' },
-    { q: 'Quantos números posso conectar e disparar por dia?', a: 'Starter: 1 número, ~300 msgs/dia após warmup. Growth: 3 números, ~1.500 msgs/dia. Scale: ilimitado, ~10k+ msgs/dia. O limite real depende da saúde de cada instância — números maduros disparam mais.' },
-    { q: 'Posso importar leads de planilha ou de outro CRM?', a: 'Sim. Aceitamos CSV no onboarding e temos importadores para HubSpot, Pipedrive, RD Station. Mapeamos campos automaticamente e validamos formato de telefone brasileiro.' },
-    { q: 'A Ruptur é compatível com a LGPD?', a: 'Sim. Hospedamos dados no Brasil (AWS São Paulo), temos DPA pronto, log de auditoria, anonimização sob demanda e retenção configurável por workspace. Opt-out automático em campanhas.' },
-    { q: 'Preciso de cartão de crédito para começar?', a: 'Não. O teste de 14 dias é gratuito e sem cartão. Você só cadastra forma de pagamento ao final do trial — processamos via Getnet (Pix, cartão, boleto).' },
-  ];
+  const items = t('landing.faq');
   return (
     <div className="faq">
       {items.map((it, i) => (
@@ -195,6 +188,7 @@ export default function Landing() {
             <a href="/blog">{t('landing.nav.blog')}</a>
           </nav>
           <div className="lp-nav-cta">
+            <LanguageSwitcher />
             <Button variant="ghost" size="sm" onClick={() => goReal('/login')}>{t('landing.nav.login')}</Button>
             <Button variant="primary" size="sm" onClick={() => goReal('/signup')}>{t('landing.nav.signup')}</Button>
           </div>
@@ -369,16 +363,16 @@ export default function Landing() {
                 <div className="lp-logo-mark">R</div>
                 <span>Ruptur OS</span>
               </div>
-              <p style={{ color: 'var(--ink-600)', fontSize: 13.5, margin: 0, maxWidth: 320 }}>Sistema operacional de receita assistido por IA para quem vende pelo WhatsApp.</p>
-              <p style={{ color: 'var(--ink-500)', fontSize: 12.5, margin: '12px 0 0', maxWidth: 320 }}>Uma empresa do grupo <a href="https://2dlcompany.com.br" target="_blank" rel="noopener" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>2DL Company</a>.</p>
+              <p style={{ color: 'var(--ink-600)', fontSize: 13.5, margin: 0, maxWidth: 320 }}>{t('footer.tagline')}</p>
+              <p style={{ color: 'var(--ink-500)', fontSize: 12.5, margin: '12px 0 0', maxWidth: 320 }}>{t('footer.group')} <a href="https://2dlcompany.com.br" target="_blank" rel="noopener" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>2DL Company</a>.</p>
             </div>
-            <div><h4>Produto</h4><ul><li><a href="#caa">Conecta</a></li><li><a href="#caa">Aquece</a></li><li><a href="#caa">Vende</a></li><li><a href="#precos">Preços</a></li></ul></div>
-            <div><h4>Empresa</h4><ul><li><a href="#">Sobre</a></li><li><a href="#">Carreiras</a></li><li><a href="/blog">Blog</a></li><li><a href="#">Contato</a></li></ul></div>
-            <div><h4>Legal</h4><ul><li><a href="#">Termos</a></li><li><a href="#">Privacidade</a></li><li><a href="#">LGPD</a></li><li><a href="#">Status</a></li></ul></div>
+            <div><h4>{t('footer.colProduct')}</h4><ul><li><a href="#caa">{t('footer.connect')}</a></li><li><a href="#caa">{t('footer.warm')}</a></li><li><a href="#caa">{t('footer.sell')}</a></li><li><a href="#precos">{t('landing.nav.pricing')}</a></li></ul></div>
+            <div><h4>{t('footer.colCompany')}</h4><ul><li><a href="#">{t('footer.about')}</a></li><li><a href="#">{t('footer.careers')}</a></li><li><a href="/blog">{t('footer.blog')}</a></li><li><a href="#">{t('footer.contact')}</a></li></ul></div>
+            <div><h4>{t('footer.colLegal')}</h4><ul><li><a href="#">{t('footer.terms')}</a></li><li><a href="#">{t('footer.privacy')}</a></li><li><a href="#">{t('footer.lgpd')}</a></li><li><a href="#">{t('footer.status')}</a></li></ul></div>
           </div>
           <div className="lp-footer-bottom">
-            <span>© 2026 Ruptur Tecnologia Ltda · CNPJ 00.000.000/0001-00</span>
-            <span>Feito com 💙 por <a href="https://2dlcompany.com.br" target="_blank" rel="noopener" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>2DL Company</a> · São Paulo 🇧🇷</span>
+            <span>{t('footer.copyright')}</span>
+            <span>{t('footer.madeBy')} <a href="https://2dlcompany.com.br" target="_blank" rel="noopener" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>2DL Company</a> · {t('footer.madeIn')} 🇧🇷</span>
           </div>
         </div>
       </footer>

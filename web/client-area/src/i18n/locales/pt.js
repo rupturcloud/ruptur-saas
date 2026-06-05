@@ -87,6 +87,16 @@ export const pt = {
         { name: 'Scale', price: 'R$ 1.297', desc: 'Times maduros com múltiplos squads, marca e franquias.', cta: 'Falar com vendas', feats: ['Usuários ilimitados', 'Instâncias ilimitadas + Cloud API Meta', '200.000+ mensagens/mês', 'A/B testing em fluxos e campanhas', 'API & webhooks abertos', 'NPS, health score, CS', 'SSO + auditoria + DPA'] },
       ],
     },
+    faq: [
+      { q: 'Como o warmup de números funciona?', a: 'Quando você conecta uma nova instância via uazapi, o Ruptur inicia um ritmo controlado de mensagens (saudações entre números próprios, simulação de conversa real e crescimento gradual) por 7, 14 ou 30 dias. Isso constrói reputação no WhatsApp e reduz drasticamente o risco de banimento antes de você começar a disparar.' },
+      { q: 'Posso enviar mensagens em massa para meus clientes?', a: 'Sim. As campanhas usam segmentação de tags, lead score e estágio do pipeline. O throttling respeita a saúde de cada número — instância recém-aquecida envia menos por hora que uma madura. Templates aprovados pela Meta passam livremente, e mensagens livres seguem regras de janela de 24h.' },
+      { q: 'O que são os fluxos conversacionais?', a: 'É um editor visual onde você conecta nós (mensagem, espera, condição, atribui SDR, marca tag, gera link). Use para qualificar lead novo automaticamente, agendar reunião, responder dúvidas frequentes e fazer handoff para humano quando precisar.' },
+      { q: 'Preciso usar meu número pessoal de WhatsApp?', a: 'Não. A Ruptur conecta via uazapi a números dedicados da sua empresa — você pode usar chips novos ou existentes. Funciona com WhatsApp Business e também com Cloud API oficial (Meta) no plano Scale. Seu número pessoal continua protegido.' },
+      { q: 'Quantos números posso conectar e disparar por dia?', a: 'Starter: 1 número, ~300 msgs/dia após warmup. Growth: 3 números, ~1.500 msgs/dia. Scale: ilimitado, ~10k+ msgs/dia. O limite real depende da saúde de cada instância — números maduros disparam mais.' },
+      { q: 'Posso importar leads de planilha ou de outro CRM?', a: 'Sim. Aceitamos CSV no onboarding e temos importadores para HubSpot, Pipedrive, RD Station. Mapeamos campos automaticamente e validamos formato de telefone brasileiro.' },
+      { q: 'A Ruptur é compatível com a LGPD?', a: 'Sim. Hospedamos dados no Brasil (AWS São Paulo), temos DPA pronto, log de auditoria, anonimização sob demanda e retenção configurável por workspace. Opt-out automático em campanhas.' },
+      { q: 'Preciso de cartão de crédito para começar?', a: 'Não. O teste de 14 dias é gratuito e sem cartão. Você só cadastra forma de pagamento ao final do trial — processamos via Getnet (Pix, cartão, boleto).' },
+    ],
     ctaBand: {
       title: 'Pronto para parar de perder lead?',
       sub: 'Conecte seu WhatsApp em 4 minutos e veja seu funil no mesmo dia.',
