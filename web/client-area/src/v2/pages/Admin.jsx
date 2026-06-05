@@ -1224,6 +1224,153 @@ function WebhooksTab() {
   );
 }
 
+// ─── Aba: Workspace (CRUD do tenant) ──────────────────────────────────────────
+
+const PLAN_OPTS = ['free', 'starter', 'pro', 'business', 'enterprise'];
+const STATUS_OPTS = ['active', 'trial', 'suspended', 'cancelled'];
+const wsInput = { width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--ink-200)', fontSize: 13, background: '#fff', boxSizing: 'border-box', color: 'var(--ink-900)' };
+
+function WsField({ label, children }) {
+  return (
+    <label style={{ display: 'block' }}>
+      <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function WorkspaceTab() {
+  const { session, tenant, isPlatformAdmin } = useAuth();
+  const h = { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' };
+
+  const [allTenants, setAllTenants] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [form, setForm] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);   // { type:'ok'|'err', text }
+
+  useEffect(() => { if (tenant?.id) setSelectedId((p) => p || tenant.id); }, [tenant?.id]);
+
+  useEffect(() => {
+    if (!isPlatformAdmin || !session?.access_token) return;
+    fetch('/api/admin/platform/tenants', { headers: h })
+      .then(r => r.ok ? r.json() : { tenants: [] })
+      .then(d => setAllTenants(d.tenants || []));
+  }, [isPlatformAdmin, session?.access_token]);
+
+  useEffect(() => { if (!selectedId && allTenants.length > 0) setSelectedId(allTenants[0].id); }, [selectedId, allTenants]);
+
+  const load = useCallback(() => {
+    if (!selectedId || !session?.access_token) return;
+    setLoading(true); setMsg(null);
+    fetch(`/api/admin/platform/tenants/${selectedId}`, { headers: h })
+      .then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Erro ${r.status}`); return r.json(); })
+      .then(d => setForm(d.tenant || null))
+      .catch(e => { setForm(null); setMsg({ type: 'err', text: e.message }); })
+      .finally(() => setLoading(false));
+  }, [selectedId, session?.access_token]);
+  useEffect(() => { load(); }, [load]);
+
+  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const save = async () => {
+    if (!form) return;
+    setSaving(true); setMsg(null);
+    try {
+      const payload = {
+        name: form.name, email: form.email, plan: form.plan, status: form.status,
+        max_instances: form.max_instances === '' || form.max_instances == null ? null : Number(form.max_instances),
+        monthly_credits: form.monthly_credits === '' || form.monthly_credits == null ? null : Number(form.monthly_credits),
+      };
+      const res = await fetch(`/api/admin/platform/tenants/${selectedId}`, { method: 'PATCH', headers: h, body: JSON.stringify(payload) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
+      setMsg({ type: 'ok', text: 'Workspace atualizado com sucesso.' });
+      load();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setSaving(false); }
+  };
+
+  const suspend = async () => {
+    if (typeof window !== 'undefined' &&
+        !window.confirm(`Suspender o workspace "${form?.name}"?\n\nOs usuários perdem o acesso até você reativar (mude o status de volta para "active").`)) return;
+    setSaving(true); setMsg(null);
+    try {
+      const res = await fetch(`/api/admin/platform/tenants/${selectedId}`, { method: 'DELETE', headers: h });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
+      setMsg({ type: 'ok', text: 'Workspace suspenso.' });
+      load();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      {/* Seletor de tenant (super admin) */}
+      {isPlatformAdmin && allTenants.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+          {allTenants.map(t => (
+            <button key={t.id} onClick={() => setSelectedId(t.id)}
+              style={{
+                padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                background: selectedId === t.id ? 'var(--brand-500)' : 'var(--ink-100)',
+                color: selectedId === t.id ? '#fff' : 'var(--ink-600)',
+                border: `1px solid ${selectedId === t.id ? 'var(--brand-500)' : 'var(--ink-200)'}`,
+              }}>
+              {t.name || t.slug}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {loading && <div style={{ padding: 24, color: 'var(--ink-400)' }}>Carregando workspace...</div>}
+      {!loading && !form && <div style={{ padding: 24, color: 'var(--ink-400)' }}>Nenhum workspace disponível.</div>}
+
+      {!loading && form && (
+        <div style={{ maxWidth: 560 }}>
+          {/* Metadados imutáveis */}
+          <div style={{ display: 'flex', gap: 20, marginBottom: 20, padding: '12px 14px', borderRadius: 10, background: 'var(--ink-50)', border: '1px solid var(--ink-150)', fontSize: 12, color: 'var(--ink-500)', flexWrap: 'wrap' }}>
+            <span>Slug: <strong style={{ color: 'var(--ink-800)' }}>{form.slug || '—'}</strong></span>
+            <span>ID: <strong style={{ color: 'var(--ink-800)' }}>{form.id?.slice(0, 8)}…</strong></span>
+            <span>Criado: <strong style={{ color: 'var(--ink-800)' }}>{form.created_at ? new Date(form.created_at).toLocaleDateString('pt-BR') : '—'}</strong></span>
+            <span>Saldo: <strong style={{ color: 'var(--ink-800)' }}>{Number(form.credits_balance || 0).toLocaleString('pt-BR')} cr</strong></span>
+          </div>
+
+          {/* Campos editáveis */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <WsField label="Nome do workspace"><input value={form.name || ''} onChange={e => setField('name', e.target.value)} style={wsInput} /></WsField>
+            <WsField label="E-mail de contato"><input type="email" value={form.email || ''} onChange={e => setField('email', e.target.value)} style={wsInput} /></WsField>
+            <WsField label="Plano"><select value={form.plan || 'free'} onChange={e => setField('plan', e.target.value)} style={wsInput}>{PLAN_OPTS.map(p => <option key={p} value={p}>{p}</option>)}</select></WsField>
+            <WsField label="Status"><select value={form.status || 'active'} onChange={e => setField('status', e.target.value)} style={wsInput}>{STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}</select></WsField>
+            <WsField label="Máx. instâncias"><input type="number" min="0" value={form.max_instances ?? ''} onChange={e => setField('max_instances', e.target.value)} style={wsInput} /></WsField>
+            <WsField label="Créditos mensais"><input type="number" min="0" value={form.monthly_credits ?? ''} onChange={e => setField('monthly_credits', e.target.value)} style={wsInput} /></WsField>
+          </div>
+
+          {msg && (
+            <div style={{
+              marginTop: 16, padding: '10px 14px', borderRadius: 8, fontSize: 13,
+              background: msg.type === 'ok' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)',
+              color: msg.type === 'ok' ? '#16a34a' : '#dc2626',
+              border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'}`,
+            }}>{msg.text}</div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button onClick={save} disabled={saving}
+              style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'var(--brand-500)', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+              {saving ? 'Salvando...' : 'Salvar alterações'}
+            </button>
+            <button onClick={suspend} disabled={saving || form.status === 'suspended'}
+              style={{ padding: '10px 16px', borderRadius: 9, border: '1px solid #fecaca', background: 'rgba(239,68,68,.06)', color: '#dc2626', fontWeight: 600, fontSize: 13, cursor: (saving || form.status === 'suspended') ? 'not-allowed' : 'pointer', opacity: (saving || form.status === 'suspended') ? 0.5 : 1 }}>
+              {form.status === 'suspended' ? 'Já suspenso' : 'Suspender workspace'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Aba genérica: Placeholder ────────────────────────────────────────────────
 
 function ComingSoonTab({ label }) {
@@ -1240,7 +1387,7 @@ function ComingSoonTab({ label }) {
 
 const TABS = [
   { id: 'users',       label: 'Usuários e papéis', component: UsersTab },
-  { id: 'workspace',   label: 'Workspace',          component: () => <ComingSoonTab label="Workspace" /> },
+  { id: 'workspace',   label: 'Workspace',          component: WorkspaceTab },
   { id: 'conta',       label: 'Conta',              component: () => <ComingSoonTab label="Conta" /> },
   { id: 'billing',     label: 'Cobrança',           component: () => <ComingSoonTab label="Cobrança" /> },
   { id: 'notifs',      label: 'Notificações',       component: () => <ComingSoonTab label="Notificações" /> },
