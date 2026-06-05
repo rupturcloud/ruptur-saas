@@ -103,6 +103,19 @@ export const pt = {
       cta: 'Começar teste de 14 dias',
     },
   },
+  app: {
+    sections: { operation: 'Operação', revenue: 'Receita', system: 'Sistema', platform: 'Plataforma' },
+    nav: {
+      dashboard: 'Cockpit', inbox: 'Inbox', pipeline: 'CRM', grupos: 'Grupos',
+      outreach: 'Outreach X1', campaigns: 'Campanhas', remarketing: 'Remarketing',
+      canais: 'Canais', numbers: 'Números', aquecimento: 'Aquecimento',
+      'rede-coletiva': 'Rede Coletiva', business: 'Business', billing: 'Receita',
+      growth: 'Growth OS', indicacoes: 'Indicações', insights: 'Insights',
+      integrations: 'Integrações', webhooks: 'Webhooks', admin: 'Configurações',
+      plataforma: 'Painel Admin', superadmin: 'Super Admin',
+    },
+    menu: { logout: 'Sair da conta' },
+  },
 };
 
 export default pt;

@@ -103,6 +103,19 @@ export const en = {
       cta: 'Start 14-day trial',
     },
   },
+  app: {
+    sections: { operation: 'Operations', revenue: 'Revenue', system: 'System', platform: 'Platform' },
+    nav: {
+      dashboard: 'Cockpit', inbox: 'Inbox', pipeline: 'CRM', grupos: 'Groups',
+      outreach: 'Outreach X1', campaigns: 'Campaigns', remarketing: 'Remarketing',
+      canais: 'Channels', numbers: 'Numbers', aquecimento: 'Warm-up',
+      'rede-coletiva': 'Collective Network', business: 'Business', billing: 'Revenue',
+      growth: 'Growth OS', indicacoes: 'Referrals', insights: 'Insights',
+      integrations: 'Integrations', webhooks: 'Webhooks', admin: 'Settings',
+      plataforma: 'Admin Panel', superadmin: 'Super Admin',
+    },
+    menu: { logout: 'Sign out' },
+  },
 };
 
 export default en;
