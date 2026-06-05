@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, Button, Card, KPI, Badge, AIChip, useToast, fireConfetti } from '../../ds/index.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { useT } from '../../i18n/index.jsx';
 
 const DASH_CSS = `
   .cock-crumbs { font-size: 12px; color: var(--ink-500); margin-bottom: 6px; }
@@ -113,11 +114,12 @@ function saveActivation(value) {
 }
 
 function FunnelChart() {
+  const t = useT();
   const stages = [
-    { label: 'Seeds (indicação)', v: 84,  w: 100, c: '#10B981' },
-    { label: 'Nets (inbound)',    v: 156, w: 82,  c: '#3B82F6' },
-    { label: 'Opps (SQL)',        v: 128, w: 60,  c: '#FF6A3D' },
-    { label: 'Deals (ganhos)',    v: 24,  w: 15,  c: '#F59E0B' },
+    { label: t('app.dashboard.funnelSeeds'), v: 84,  w: 100, c: '#10B981' },
+    { label: t('app.dashboard.funnelNets'),  v: 156, w: 82,  c: '#3B82F6' },
+    { label: t('app.dashboard.funnelOpps'),  v: 128, w: 60,  c: '#FF6A3D' },
+    { label: t('app.dashboard.funnelDeals'), v: 24,  w: 15,  c: '#F59E0B' },
   ];
   return (
     <div>
@@ -138,12 +140,12 @@ function FunnelChart() {
 }
 
 function StageBars() {
-  // Pipeline será populado à medida que leads forem inseridos no CRM
+  const t = useT();
   return (
     <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--ink-400)', fontSize: 13 }}>
       <div style={{ fontSize: 24, marginBottom: 8 }}>📊</div>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>Sem deals no pipeline ainda</div>
-      <div style={{ fontSize: 12 }}>Adicione leads e mova-os pelo funil para ver os estágios aqui.</div>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('app.dashboard.emptyTitle')}</div>
+      <div style={{ fontSize: 12 }}>{t('app.dashboard.emptySub')}</div>
     </div>
   );
 }
@@ -154,6 +156,11 @@ export default function Dashboard() {
   const toast = useToast();
 
   const { session, tenant } = useAuth();
+  const t = useT();
+  const userName =
+    session?.user?.user_metadata?.full_name ||
+    session?.user?.email?.split('@')[0] ||
+    'Diego';
   const [activation, setActivation] = useState(loadActivation);
   const [stats, setStats] = useState({ replies: 0, qualified: 0, hours: 0, value: 0 });
   const [alerts, setAlerts] = useState([]);
@@ -194,11 +201,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (activation.activation >= 60) return;
-    const t = setInterval(() => {
-      toast.push('Ative em 1 clique — deixa que a IA preenche 🚀');
+    const timer = setInterval(() => {
+      toast.push(t('app.dashboard.toastNudge'));
     }, 35000);
-    return () => clearInterval(t);
-  }, [activation.activation, toast]);
+    return () => clearInterval(timer);
+  }, [activation.activation, toast, t]);
 
   const triggerEvent = (key, points, label) => {
     if (activation.events[key]) return;
@@ -210,7 +217,7 @@ export default function Dashboard() {
     setActivation(next);
     saveActivation(next);
     fireConfetti(80);
-    toast.push(`Você destravou +${points}% — ${label}`);
+    toast.push(t('app.dashboard.toastUnlock', { p: points, label }));
   };
 
   const onRescue = () => {
@@ -221,7 +228,7 @@ export default function Dashboard() {
     setActivation(next);
     saveActivation(next);
     fireConfetti(140);
-    toast.push('Ruptur preencheu pra você. +60% destravado 🎉');
+    toast.push(t('app.dashboard.toastRescue'));
   };
 
   const iconForActivity = (kind) => {
@@ -244,10 +251,10 @@ export default function Dashboard() {
   };
   const reasonForAlert = (kind) => {
     switch (kind) {
-      case 'sla': return 'lead sem owner >15min';
-      case 'risk': return 'deal sem atividade 7d';
-      case 'cs': return 'NPS<7';
-      default: return 'fatura D+4';
+      case 'sla': return t('app.dashboard.alertSla');
+      case 'risk': return t('app.dashboard.alertRisk');
+      case 'cs': return t('app.dashboard.alertCs');
+      default: return t('app.dashboard.alertDefault');
     }
   };
 
@@ -255,45 +262,45 @@ export default function Dashboard() {
     <>
       <style>{DASH_CSS}</style>
 
-      <div className="cock-crumbs">Cockpit</div>
+      <div className="cock-crumbs">{t('app.dashboard.crumbs')}</div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
         <div>
-          <h1 className="cock-title">Bom trabalho, Diego.</h1>
-          <p className="cock-sub">17/mai/2026 · plano <b style={{ color: 'var(--brand-500)' }}>{(activation.plan || 'growth').toUpperCase()}</b> · cockpit ao vivo</p>
+          <h1 className="cock-title">{t('app.dashboard.greeting', { name: userName })}</h1>
+          <p className="cock-sub">{t('app.dashboard.sub', { plan: (activation.plan || 'growth').toUpperCase() })}</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <AIChip text="IA respondeu 14 conversas hoje" tone="wa" />
-          <AIChip text="3 leads qualificados auto" tone="purple" />
+          <AIChip text={t('app.dashboard.chip1')} tone="wa" />
+          <AIChip text={t('app.dashboard.chip2')} tone="purple" />
         </div>
       </div>
 
       <div className="act">
         <div className="act-row">
           <div className="act-text">
-            <div className="act-eyebrow">🚀 Ativação · Linear-style gamification</div>
-            <h2 className="act-h">Você está <em>{activation.activation}%</em> ativado</h2>
+            <div className="act-eyebrow">{t('app.dashboard.actEyebrow')}</div>
+            <h2 className="act-h">{t('app.dashboard.actTitleA')}<em>{activation.activation}%</em>{t('app.dashboard.actTitleB')}</h2>
             <div className="act-bar"><i style={{ width: activation.activation + '%' }} /></div>
             <p style={{ margin: '10px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,.55)' }}>
               {activation.activation < 100
-                ? `Faltam ${100 - activation.activation}% pra ativação total. Clique nos checkpoints abaixo pra simular.`
-                : 'Ativação completa. Você operacionalizou o Ruptur OS 🎉'}
+                ? t('app.dashboard.actRemaining', { n: 100 - activation.activation })
+                : t('app.dashboard.actComplete')}
             </p>
           </div>
         </div>
 
         <div className="act-checkpoints">
           {[
-            { k: 'wa_connected',   l: 'WhatsApp conectado', p: 20, ic: 'wa' },
-            { k: 'warmup',         l: 'Warmup ativo',       p: 15, ic: 'fire' },
-            { k: 'first_campaign', l: '1ª campanha',        p: 20, ic: 'broadcast' },
-            { k: 'first_lead',     l: '1º lead recebido',   p: 25, ic: 'leads' },
-            { k: 'first_sale',     l: '1ª venda',           p: 20, ic: 'billing' },
+            { k: 'wa_connected',   l: t('app.dashboard.cpWaConnected'),   p: 20, ic: 'wa' },
+            { k: 'warmup',         l: t('app.dashboard.cpWarmup'),        p: 15, ic: 'fire' },
+            { k: 'first_campaign', l: t('app.dashboard.cpFirstCampaign'), p: 20, ic: 'broadcast' },
+            { k: 'first_lead',     l: t('app.dashboard.cpFirstLead'),     p: 25, ic: 'leads' },
+            { k: 'first_sale',     l: t('app.dashboard.cpFirstSale'),     p: 20, ic: 'billing' },
           ].map(c => (
             <div
               key={c.k}
               className={`act-check ${activation.events[c.k] ? 'done' : ''}`}
               onClick={() => triggerEvent(c.k, c.p, c.l)}
-              title={activation.events[c.k] ? 'Concluído' : `Falta ${c.p}% pra ativar isso`}
+              title={activation.events[c.k] ? t('app.dashboard.cpDone') : t('app.dashboard.cpMissing', { p: c.p })}
             >
               <div className="act-check-c">
                 {activation.events[c.k] ? <Icon name="check" size={14} stroke={3} /> : <Icon name={c.ic} size={13} />}
@@ -309,55 +316,55 @@ export default function Dashboard() {
         <div className="hoje-row">
           <div className="hoje-icon"><Icon name="sparkles" size={20} /></div>
           <div>
-            <h3 className="hoje-h">Hoje o Ruptur trabalhou por você:</h3>
-            <div className="hoje-sub">Equivale a um SDR full-time · atualiza a cada 30 segundos</div>
+            <h3 className="hoje-h">{t('app.dashboard.hojeTitle')}</h3>
+            <div className="hoje-sub">{t('app.dashboard.hojeSub')}</div>
           </div>
           <div className="hoje-stats">
-            <div className="hoje-stat"><div className="v tabular">{stats.replies}</div><div className="l">respostas IA</div><div className="t">+22 vs ontem</div></div>
-            <div className="hoje-stat"><div className="v tabular">{stats.qualified}</div><div className="l">leads qualificados</div><div className="t">+3 vs ontem</div></div>
-            <div className="hoje-stat"><div className="v tabular">{stats.hours}h</div><div className="l">economizadas</div><div className="t">+0,8h vs ontem</div></div>
-            <div className="hoje-stat"><div className="v tabular">R$ {stats.value.toLocaleString('pt-BR')}</div><div className="l">potencial criado</div><div className="t">+R$ 1.240</div></div>
+            <div className="hoje-stat"><div className="v tabular">{stats.replies}</div><div className="l">{t('app.dashboard.statReplies')}</div><div className="t">+22 {t('app.dashboard.vsYesterday')}</div></div>
+            <div className="hoje-stat"><div className="v tabular">{stats.qualified}</div><div className="l">{t('app.dashboard.statQualified')}</div><div className="t">+3 {t('app.dashboard.vsYesterday')}</div></div>
+            <div className="hoje-stat"><div className="v tabular">{stats.hours}h</div><div className="l">{t('app.dashboard.statHours')}</div><div className="t">+0,8h {t('app.dashboard.vsYesterday')}</div></div>
+            <div className="hoje-stat"><div className="v tabular">R$ {stats.value.toLocaleString('pt-BR')}</div><div className="l">{t('app.dashboard.statValue')}</div><div className="t">+R$ 1.240</div></div>
           </div>
-          <Button variant="secondary" size="sm" icon="arrowRight">Ver detalhes</Button>
+          <Button variant="secondary" size="sm" icon="arrowRight">{t('app.dashboard.verDetalhes')}</Button>
         </div>
       </div>
 
       <div className="kpis">
-        <KPI label="MRR"               value="R$ 84.2k" delta="+12,4%"  deltaTone="up" hint="vs abril" />
-        <KPI label="Leads novos"       value="248"      delta="+38"      hint="esta semana" />
-        <KPI label="SQL"               value="128"      delta="+22"      hint="taxa 51%" />
-        <KPI label="Win-rate"          value="34%"      delta="+3,1 pp"  hint="média ano: 31%" />
-        <KPI label="Conversas abertas" value="42"       delta="+7"       hint="agora" />
-        <KPI label="Score médio chips" value="86"       delta="+4 pp"    hint="saúde geral" accent="var(--success)" />
+        <KPI label={t('app.dashboard.kpiMrr')}   value="R$ 84.2k" delta="+12,4%"  deltaTone="up" hint={t('app.dashboard.hintVsApril')} />
+        <KPI label={t('app.dashboard.kpiLeads')} value="248"      delta="+38"      hint={t('app.dashboard.hintThisWeek')} />
+        <KPI label={t('app.dashboard.kpiSql')}   value="128"      delta="+22"      hint={t('app.dashboard.hintRate51')} />
+        <KPI label={t('app.dashboard.kpiWin')}   value="34%"      delta="+3,1 pp"  hint={t('app.dashboard.hintYearAvg')} />
+        <KPI label={t('app.dashboard.kpiConv')}  value="42"       delta="+7"       hint={t('app.dashboard.hintNow')} />
+        <KPI label={t('app.dashboard.kpiScore')} value="86"       delta="+4 pp"    hint={t('app.dashboard.hintHealth')} accent="var(--success)" />
       </div>
 
       <div className="revpred" style={{ marginBottom: 16 }}>
         <div className="revpred-ic"><Icon name="trendUp" size={18} /></div>
         <div className="revpred-text">
-          <h4>Você está a <b>R$ 3.200</b> do seu potencial de receita esta semana.</h4>
-          <p>Aquecer mais 2 números pode te levar lá em ~14 dias.</p>
+          <h4>{t('app.dashboard.revpredA')}<b>R$ 3.200</b>{t('app.dashboard.revpredB')}</h4>
+          <p>{t('app.dashboard.revpredSub')}</p>
         </div>
-        <Button variant="primary" size="sm" icon="arrowRight" onClick={() => go('numbers')}>Aquecer agora</Button>
+        <Button variant="primary" size="sm" icon="arrowRight" onClick={() => go('numbers')}>{t('app.dashboard.aquecerAgora')}</Button>
       </div>
 
       <div className="dash-grid">
         <div className="stack" style={{ gap: 16 }}>
-          <Card title="Receita Previsível — Seeds / Nets / Opps / Deals">
+          <Card title={t('app.dashboard.cardFunnel')}>
             <FunnelChart />
           </Card>
 
-          <Card title="Pipeline por estágio" action={<Button variant="ghost" size="sm" onClick={() => go('pipeline')}>Ver CRM →</Button>}>
+          <Card title={t('app.dashboard.cardPipeline')} action={<Button variant="ghost" size="sm" onClick={() => go('pipeline')}>{t('app.dashboard.verCrm')}</Button>}>
             <StageBars />
           </Card>
         </div>
 
         <div className="stack" style={{ gap: 16 }}>
-          <Card title="Alertas IA & SLA" action={<Badge tone="danger">3 críticos</Badge>}>
+          <Card title={t('app.dashboard.cardAlerts')} action={<Badge tone="danger">{t('app.dashboard.criticos')}</Badge>}>
             <div className="alert-list">
               {alerts.map((a, i) => (
                 <div key={i} className={`alert-row ${a.tone}`}>
                   <div className="ic"><Icon name={iconForAlert(a.kind)} size={14} /></div>
-                  <div className="text">{a.text}<small>regra: {reasonForAlert(a.kind)}</small></div>
+                  <div className="text">{a.text}<small>{t('app.dashboard.alertRule')} {reasonForAlert(a.kind)}</small></div>
                   <Button variant="ghost" size="sm">{a.cta}</Button>
                 </div>
               ))}
@@ -365,11 +372,11 @@ export default function Dashboard() {
           </Card>
 
           <Card
-            title="Atividade em tempo real"
+            title={t('app.dashboard.cardActivity')}
             action={
               <span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', animation: 'pulse 1.4s infinite' }} />
-                ao vivo
+                {t('app.dashboard.aoVivo')}
               </span>
             }
           >
@@ -400,15 +407,15 @@ export default function Dashboard() {
             <Icon name="sparkles" size={18} />
           </div>
           <div style={{ flex: 1, fontSize: 13, lineHeight: 1.45 }}>
-            <b style={{ fontWeight: 700, fontSize: 13.5 }}>Ative em 1 clique</b><br />
-            <span style={{ opacity: .92 }}>Faltam {100 - activation.activation}% pra receita rolar. A IA preenche.</span>
+            <b style={{ fontWeight: 700, fontSize: 13.5 }}>{t('app.dashboard.rescueTitle')}</b><br />
+            <span style={{ opacity: .92 }}>{t('app.dashboard.rescueSub', { n: 100 - activation.activation })}</span>
           </div>
           <button onClick={onRescue} style={{
             background: 'white', color: 'var(--brand-500)', border: 'none',
             padding: '9px 14px', borderRadius: 9, fontWeight: 700, fontSize: 13,
             cursor: 'pointer', whiteSpace: 'nowrap',
           }}>
-            Ativar agora
+            {t('app.dashboard.rescueBtn')}
           </button>
         </div>
       )}
