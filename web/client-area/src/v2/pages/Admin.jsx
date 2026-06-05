@@ -1371,6 +1371,146 @@ function WorkspaceTab() {
   );
 }
 
+// ─── Aba: Permissões (super admins da plataforma) ─────────────────────────────
+
+function PermissionsTab() {
+  const { session, isPlatformAdmin } = useAuth();
+  const h = { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' };
+
+  const [admins, setAdmins] = useState([]);
+  const [invites, setInvites] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [lastInviteUrl, setLastInviteUrl] = useState(null);
+
+  const load = useCallback(() => {
+    if (!session?.access_token || !isPlatformAdmin) return;
+    setLoading(true); setMsg(null);
+    Promise.all([
+      fetch('/api/admin/platform/admins', { headers: h }).then(r => r.ok ? r.json() : { data: [] }),
+      fetch('/api/admin/platform/invites', { headers: h }).then(r => r.ok ? r.json() : { invites: [] }),
+    ]).then(([a, i]) => { setAdmins(a.data || []); setInvites(i.invites || []); })
+      .catch(e => setMsg({ type: 'err', text: e.message }))
+      .finally(() => setLoading(false));
+  }, [session?.access_token, isPlatformAdmin]);
+  useEffect(() => { load(); }, [load]);
+
+  const invite = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !email.includes('@')) { setMsg({ type: 'err', text: 'Informe um e-mail válido' }); return; }
+    setBusy(true); setMsg(null); setLastInviteUrl(null);
+    try {
+      const res = await fetch('/api/admin/platform/invite', { method: 'POST', headers: h, body: JSON.stringify({ email }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
+      setMsg({ type: 'ok', text: body.message || 'Convite criado.' });
+      if (body.inviteUrl) setLastInviteUrl(body.inviteUrl);
+      setInviteEmail(''); setInviteOpen(false);
+      load();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (adminId, email) => {
+    if (typeof window !== 'undefined' && !window.confirm(`Remover o super admin ${email}?\n\nPerde o acesso de plataforma imediatamente.`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      const res = await fetch('/api/admin/platform/remove', { method: 'POST', headers: h, body: JSON.stringify({ adminId }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
+      setMsg({ type: 'ok', text: body.message || 'Super admin removido.' });
+      load();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setBusy(false); }
+  };
+
+  if (!isPlatformAdmin) {
+    return <div style={{ padding: 24, color: 'var(--ink-400)', textAlign: 'center' }}>Apenas super admins podem gerenciar permissões de plataforma.</div>;
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 15 }}>Super admins · {loading ? '...' : admins.length}</div>
+        <button onClick={() => { setInviteOpen(o => !o); setMsg(null); }}
+          style={{ padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--brand-500)', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+          {inviteOpen ? '✕ Cancelar' : '+ Convidar super admin'}
+        </button>
+      </div>
+
+      {inviteOpen && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', padding: 14, marginBottom: 14, borderRadius: 10, background: 'var(--ink-50)', border: '1px solid var(--ink-150)' }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>E-mail do novo super admin</label>
+            <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && invite()} placeholder="admin@empresa.com" autoFocus style={wsInput} />
+          </div>
+          <button onClick={invite} disabled={busy} style={{ padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--brand-500)', color: '#fff', fontSize: 13, fontWeight: 600, opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Enviando...' : 'Convidar'}
+          </button>
+        </div>
+      )}
+
+      {msg && <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, fontSize: 13, background: msg.type === 'ok' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)', color: msg.type === 'ok' ? '#16a34a' : '#dc2626', border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'}` }}>{msg.text}</div>}
+
+      {lastInviteUrl && (
+        <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, background: 'var(--ink-50)', border: '1px solid var(--ink-150)', fontSize: 12 }}>
+          <div style={{ color: 'var(--ink-500)', marginBottom: 5 }}>Link do convite (envie ao convidado):</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <code style={{ flex: 1, fontSize: 11, color: 'var(--ink-700)', wordBreak: 'break-all' }}>{lastInviteUrl}</code>
+            <button onClick={() => navigator.clipboard?.writeText(lastInviteUrl)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--ink-200)', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', color: 'var(--ink-600)' }}>Copiar</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ border: '1px solid var(--ink-150)', borderRadius: 10, overflow: 'hidden', marginBottom: 18 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead><tr style={{ background: 'var(--ink-50)' }}>
+            {['E-MAIL', 'STATUS', 'DESDE', 'AÇÕES'].map(c => <th key={c} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, fontSize: 11, color: 'var(--ink-500)' }}>{c}</th>)}
+          </tr></thead>
+          <tbody>
+            {loading && <tr><td colSpan={4} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-400)' }}>Carregando...</td></tr>}
+            {!loading && admins.length === 0 && <tr><td colSpan={4} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-400)' }}>Nenhum super admin.</td></tr>}
+            {!loading && admins.map((a, i) => (
+              <tr key={a.id || a.user_id} style={{ borderTop: i > 0 ? '1px solid var(--ink-100)' : 'none' }}>
+                <td style={{ padding: '12px 16px', color: 'var(--ink-900)', fontWeight: 500 }}>{a.email}</td>
+                <td style={{ padding: '12px 16px' }}><span style={{ color: a.status === 'active' ? '#22c55e' : '#f59e0b', fontWeight: 600 }}>{a.status || 'active'}</span></td>
+                <td style={{ padding: '12px 16px', color: 'var(--ink-500)', fontSize: 12 }}>{a.created_at ? new Date(a.created_at).toLocaleDateString('pt-BR') : '—'}</td>
+                <td style={{ padding: '12px 16px' }}>
+                  <button onClick={() => remove(a.id || a.user_id, a.email)} disabled={busy}
+                    style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #fecaca', background: 'rgba(239,68,68,.06)', color: '#dc2626', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                    Remover
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {invites.length > 0 && (
+        <div>
+          <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 14, marginBottom: 10 }}>Convites pendentes · {invites.length}</div>
+          <div style={{ border: '1px solid var(--ink-150)', borderRadius: 10, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <tbody>
+                {invites.map((inv, i) => (
+                  <tr key={inv.id || i} style={{ borderTop: i > 0 ? '1px solid var(--ink-100)' : 'none' }}>
+                    <td style={{ padding: '10px 16px', color: 'var(--ink-700)' }}>{inv.email}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--ink-400)', fontSize: 12 }}>{inv.expires_at ? 'expira ' + new Date(inv.expires_at).toLocaleDateString('pt-BR') : 'pendente'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Aba genérica: Placeholder ────────────────────────────────────────────────
 
 function ComingSoonTab({ label }) {
@@ -1393,7 +1533,7 @@ const TABS = [
   { id: 'notifs',      label: 'Notificações',       component: () => <ComingSoonTab label="Notificações" /> },
   { id: 'lgpd',        label: 'Privacidade & LGPD', component: () => <ComingSoonTab label="Privacidade & LGPD" /> },
   { id: 'conectores',  label: 'Conectores',         component: ConnectorsTab },
-  { id: 'permissions', label: 'Permissões',         component: () => <ComingSoonTab label="Permissões" /> },
+  { id: 'permissions', label: 'Permissões',         component: PermissionsTab },
   { id: 'uazapi',      label: 'Instâncias uazapi',  component: UazapiTab },
   { id: 'webhooks',    label: 'Webhooks',           component: WebhooksTab },
 ];
