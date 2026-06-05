@@ -1802,6 +1802,69 @@ function NotificacoesTab() {
   );
 }
 
+// ─── Aba: Privacidade & LGPD ──────────────────────────────────────────────────
+
+function LgpdCard({ title, desc, children }) {
+  return (
+    <div style={{ border: '1px solid var(--ink-150)', borderRadius: 12, padding: 18, marginBottom: 14 }}>
+      <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 14, lineHeight: 1.5 }}>{desc}</div>
+      {children}
+    </div>
+  );
+}
+
+function LgpdTab() {
+  const { user, tenant } = useAuth();
+  const [exported, setExported] = useState(false);
+
+  const exportData = () => {
+    const data = {
+      exportadoEm: new Date().toISOString(),
+      usuario: {
+        id: user?.id, email: user?.email,
+        nome: user?.user_metadata?.full_name || null,
+        criadoEm: user?.created_at, ultimoAcesso: user?.last_sign_in_at,
+        preferenciasNotificacao: user?.user_metadata?.notification_prefs || null,
+      },
+      workspace: tenant ? { id: tenant.id, nome: tenant.name, slug: tenant.slug, plano: tenant.plan, papel: tenant.userRole } : null,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `ruptur-meus-dados-${user?.id?.slice(0, 8) || 'export'}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    setExported(true); setTimeout(() => setExported(false), 2500);
+  };
+
+  const requestDeletion = () => {
+    const subject = encodeURIComponent('Solicitação de exclusão de conta (LGPD)');
+    const body = encodeURIComponent(`Solicito a exclusão da minha conta e dados pessoais conforme a LGPD.\n\nE-mail: ${user?.email}\nID: ${user?.id}\nWorkspace: ${tenant?.name || '—'}\n\n(Estou ciente de que esta ação é irreversível.)`);
+    window.location.href = `mailto:suporte@ruptur.cloud?subject=${subject}&body=${body}`;
+  };
+
+  return (
+    <div style={{ maxWidth: 640 }}>
+      <LgpdCard title="Exportar meus dados" desc="Baixe uma cópia dos seus dados pessoais no Ruptur (perfil, workspace e preferências) em formato JSON — direito de acesso e portabilidade (LGPD Art. 18, II e V).">
+        <button onClick={exportData} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: 'var(--brand-500)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+          {exported ? '✓ Arquivo baixado' : 'Exportar dados (JSON)'}
+        </button>
+      </LgpdCard>
+
+      <LgpdCard title="Dados que coletamos" desc="Para operar o serviço, armazenamos: e-mail e nome de login; dados do workspace (nome, plano, créditos); números WhatsApp conectados e métricas de envio; mensagens processadas (inbox e campanhas). Não vendemos seus dados a terceiros.">
+        <div style={{ fontSize: 12, color: 'var(--ink-400)' }}>Tokens de provedores são criptografados (AES-256-GCM). Política completa em ruptur.cloud/privacidade.</div>
+      </LgpdCard>
+
+      <LgpdCard title="Excluir minha conta" desc="Direito ao esquecimento (LGPD Art. 18, VI). Ao solicitar, sua conta e dados pessoais serão removidos após confirmação. Esta ação é irreversível e encerra o acesso ao workspace.">
+        <button onClick={requestDeletion} style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid #fecaca', background: 'rgba(239,68,68,.06)', color: '#dc2626', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+          Solicitar exclusão da conta
+        </button>
+      </LgpdCard>
+    </div>
+  );
+}
+
 // ─── Aba genérica: Placeholder ────────────────────────────────────────────────
 
 function ComingSoonTab({ label }) {
@@ -1822,7 +1885,7 @@ const TABS = [
   { id: 'conta',       label: 'Conta',              component: ContaTab },
   { id: 'billing',     label: 'Cobrança',           component: BillingTab },
   { id: 'notifs',      label: 'Notificações',       component: NotificacoesTab },
-  { id: 'lgpd',        label: 'Privacidade & LGPD', component: () => <ComingSoonTab label="Privacidade & LGPD" /> },
+  { id: 'lgpd',        label: 'Privacidade & LGPD', component: LgpdTab },
   { id: 'conectores',  label: 'Conectores',         component: ConnectorsTab },
   { id: 'permissions', label: 'Permissões',         component: PermissionsTab },
   { id: 'uazapi',      label: 'Instâncias uazapi',  component: UazapiTab },
