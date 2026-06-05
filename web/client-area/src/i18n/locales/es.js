@@ -40,6 +40,45 @@ export const es = {
     published: 'Publicado el',
     notFound: 'Artículo no encontrado.',
   },
+  landing: {
+    nav: { product: 'Producto', how: 'Cómo funciona', who: 'Para quién', pricing: 'Precios', faq: 'FAQ', blog: 'Blog', login: 'Entrar', signup: 'Empezar gratis' },
+    hero: {
+      badge: 'Sistema operativo de ingresos asistido por IA',
+      titleA: 'Vender y atender por ',
+      titleEm: 'WhatsApp a escala',
+      titleB: ' — sin quemar números ni perder leads.',
+      sub: 'Ruptur OS conecta tus números, los calienta con seguridad, dispara flujos que convierten y organiza tus ingresos en un CRM previsible — con IA trabajando 24/7 por ti.',
+      ctaPrimary: 'Empezar prueba de 14 días',
+      ctaDemo: 'Ver demo (mock) →',
+      ratingSuffix: '— 412 reseñas',
+      noCard: 'Sin tarjeta · Compatible con LGPD',
+    },
+    logos: { label: '+1.200 operaciones vendiendo mejor' },
+    caa: {
+      kicker: 'Qué es Ruptur OS',
+      title: 'Tres verbos. Un sistema. Tu máquina de ingresos por WhatsApp.',
+      steps: [
+        { title: 'Conecta.', desc: 'Conecta tus números de WhatsApp en minutos vía uazapi o Cloud API. Multi-instancia, multi-equipo, un solo lugar.' },
+        { title: 'Calienta.', desc: 'Calentamiento automático, throttling inteligente y kill switch anti-baneo. Tus chips ganan reputación sin que lo pienses.' },
+        { title: 'Vende.', desc: 'Flujos conversacionales que disparan, califican, agendan y cierran — con IA sugiriendo la próxima acción en cada lead.' },
+      ],
+    },
+    sections: {
+      pillarsKicker: 'Cómo funciona',
+      pillarsTitle: 'Tres pilares para una máquina de ventas previsible',
+      pillarsSub: 'La misma metodología de las mayores operaciones B2B, adaptada a la forma brasileña de vender por WhatsApp.',
+      pricingKicker: 'Precios',
+      pricingTitle: 'Crece sin reescribir tu stack',
+      pricingSub: 'Cobramos por workspace, no por usuario. Sin letra pequeña.',
+      faqKicker: 'Preguntas frecuentes',
+      faqTitle: 'Resolviendo las dudas más comunes',
+    },
+    ctaBand: {
+      title: '¿Listo para dejar de perder leads?',
+      sub: 'Conecta tu WhatsApp en 4 minutos y mira tu embudo el mismo día.',
+      cta: 'Empezar prueba de 14 días',
+    },
+  },
 };
 
 export default es;

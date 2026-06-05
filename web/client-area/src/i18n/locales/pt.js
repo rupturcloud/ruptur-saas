@@ -40,6 +40,45 @@ export const pt = {
     published: 'Publicado em',
     notFound: 'Artigo não encontrado.',
   },
+  landing: {
+    nav: { product: 'Produto', how: 'Como funciona', who: 'Para quem', pricing: 'Preços', faq: 'FAQ', blog: 'Blog', login: 'Entrar', signup: 'Começar grátis' },
+    hero: {
+      badge: 'Sistema operacional de receita assistido por IA',
+      titleA: 'Vender e atender pelo ',
+      titleEm: 'WhatsApp em escala',
+      titleB: ' — sem queimar número, sem perder lead.',
+      sub: 'O Ruptur OS conecta seus números, aquece com segurança, dispara fluxos que convertem e organiza sua receita em um CRM previsível — com IA trabalhando 24/7 por você.',
+      ctaPrimary: 'Começar teste de 14 dias',
+      ctaDemo: 'Ver demo (mock) →',
+      ratingSuffix: '— 412 avaliações',
+      noCard: 'Sem cartão · LGPD compliant',
+    },
+    logos: { label: '+1.200 operações vendendo melhor' },
+    caa: {
+      kicker: 'O que é o Ruptur OS',
+      title: 'Três verbos. Um sistema. Sua máquina de receita pelo WhatsApp.',
+      steps: [
+        { title: 'Conecta.', desc: 'Pluga seus números de WhatsApp em minutos via uazapi ou Cloud API. Multi-instância, multi-time, um lugar só.' },
+        { title: 'Aquece.', desc: 'Warmup automático, throttling inteligente e kill switch anti-ban. Seus chips ganham reputação sem você pensar.' },
+        { title: 'Vende.', desc: 'Fluxos conversacionais, dispara, qualifica, agenda e fecha — com IA sugerindo a próxima ação em cada lead.' },
+      ],
+    },
+    sections: {
+      pillarsKicker: 'Como funciona',
+      pillarsTitle: 'Três pilares para uma máquina de vendas previsível',
+      pillarsSub: 'Mesma metodologia das maiores operações B2B, adaptada ao jeito brasileiro de vender por WhatsApp.',
+      pricingKicker: 'Preços',
+      pricingTitle: 'Cresça sem reescrever o stack',
+      pricingSub: 'Cobramos por workspace, não por usuário. Sem letra miúda.',
+      faqKicker: 'Perguntas frequentes',
+      faqTitle: 'Tirando as dúvidas mais comuns',
+    },
+    ctaBand: {
+      title: 'Pronto para parar de perder lead?',
+      sub: 'Conecte seu WhatsApp em 4 minutos e veja seu funil no mesmo dia.',
+      cta: 'Começar teste de 14 dias',
+    },
+  },
 };
 
 export default pt;

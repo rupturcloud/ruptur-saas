@@ -40,6 +40,45 @@ export const en = {
     published: 'Published on',
     notFound: 'Article not found.',
   },
+  landing: {
+    nav: { product: 'Product', how: 'How it works', who: "Who it's for", pricing: 'Pricing', faq: 'FAQ', blog: 'Blog', login: 'Sign in', signup: 'Start free' },
+    hero: {
+      badge: 'AI-assisted revenue operating system',
+      titleA: 'Sell and support on ',
+      titleEm: 'WhatsApp at scale',
+      titleB: ' — without burning numbers or losing leads.',
+      sub: 'Ruptur OS connects your numbers, warms them up safely, runs flows that convert and organizes your revenue in a predictable CRM — with AI working 24/7 for you.',
+      ctaPrimary: 'Start 14-day trial',
+      ctaDemo: 'See demo (mock) →',
+      ratingSuffix: '— 412 reviews',
+      noCard: 'No card · LGPD compliant',
+    },
+    logos: { label: '+1,200 operations selling better' },
+    caa: {
+      kicker: 'What Ruptur OS is',
+      title: 'Three verbs. One system. Your revenue machine on WhatsApp.',
+      steps: [
+        { title: 'Connect.', desc: 'Plug in your WhatsApp numbers in minutes via uazapi or Cloud API. Multi-instance, multi-team, one place.' },
+        { title: 'Warm up.', desc: 'Automatic warmup, smart throttling and an anti-ban kill switch. Your numbers build reputation without you thinking about it.' },
+        { title: 'Sell.', desc: 'Conversational flows that blast, qualify, schedule and close — with AI suggesting the next action on every lead.' },
+      ],
+    },
+    sections: {
+      pillarsKicker: 'How it works',
+      pillarsTitle: 'Three pillars for a predictable sales machine',
+      pillarsSub: 'The same methodology as the largest B2B operations, adapted to the Brazilian way of selling on WhatsApp.',
+      pricingKicker: 'Pricing',
+      pricingTitle: 'Grow without rewriting your stack',
+      pricingSub: 'We charge per workspace, not per user. No fine print.',
+      faqKicker: 'Frequently asked questions',
+      faqTitle: 'Clearing up the most common questions',
+    },
+    ctaBand: {
+      title: 'Ready to stop losing leads?',
+      sub: 'Connect your WhatsApp in 4 minutes and see your funnel the same day.',
+      cta: 'Start 14-day trial',
+    },
+  },
 };
 
 export default en;

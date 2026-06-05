@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, Button, SocialProofToasts } from '../../ds/index.js';
+import { useT } from '../../i18n/index.jsx';
 
 const LANDING_CSS = `
   .lp { background: var(--ink-0); min-height: 100vh; color: var(--ink-900); }
@@ -163,6 +164,7 @@ function FAQ() {
 
 export default function Landing() {
   const navigate = useNavigate();
+  const t = useT();
   const go = (r) => navigate(`/v2/${r}`);
   // Para o app real (Supabase auth + APIs reais): /login, /signup, /dashboard...
   const goReal = (r) => navigate(r.startsWith('/') ? r : `/${r}`);
@@ -177,16 +179,16 @@ export default function Landing() {
             <span>Ruptur OS</span>
           </div>
           <nav className="lp-nav-links">
-            <a href="#produto">Produto</a>
-            <a href="#caa">Como funciona</a>
-            <a href="#personas" onClick={(e) => { e.preventDefault(); go('personas'); }}>Para quem</a>
-            <a href="#precos">Preços</a>
-            <a href="#faq">FAQ</a>
-            <a href="/blog">Blog</a>
+            <a href="#produto">{t('landing.nav.product')}</a>
+            <a href="#caa">{t('landing.nav.how')}</a>
+            <a href="#personas" onClick={(e) => { e.preventDefault(); go('personas'); }}>{t('landing.nav.who')}</a>
+            <a href="#precos">{t('landing.nav.pricing')}</a>
+            <a href="#faq">{t('landing.nav.faq')}</a>
+            <a href="/blog">{t('landing.nav.blog')}</a>
           </nav>
           <div className="lp-nav-cta">
-            <Button variant="ghost" size="sm" onClick={() => goReal('/login')}>Entrar</Button>
-            <Button variant="primary" size="sm" onClick={() => goReal('/signup')}>Começar grátis</Button>
+            <Button variant="ghost" size="sm" onClick={() => goReal('/login')}>{t('landing.nav.login')}</Button>
+            <Button variant="primary" size="sm" onClick={() => goReal('/signup')}>{t('landing.nav.signup')}</Button>
           </div>
         </div>
       </header>
@@ -196,19 +198,19 @@ export default function Landing() {
           <div>
             <div className="lp-eyebrow">
               <span className="pill">RUPTUR OS</span>
-              <span>Sistema operacional de receita assistido por IA</span>
+              <span>{t('landing.hero.badge')}</span>
             </div>
-            <h1 className="lp-h1">Vender e atender pelo <em>WhatsApp em escala</em> — sem queimar número, sem perder lead.</h1>
-            <p className="lp-sub">O Ruptur OS conecta seus números, aquece com segurança, dispara fluxos que convertem e organiza sua receita em um CRM previsível — com IA trabalhando 24/7 por você.</p>
+            <h1 className="lp-h1">{t('landing.hero.titleA')}<em>{t('landing.hero.titleEm')}</em>{t('landing.hero.titleB')}</h1>
+            <p className="lp-sub">{t('landing.hero.sub')}</p>
             <div className="lp-cta-row">
-              <Button variant="primary" size="lg" icon="arrowRight" onClick={() => goReal('/signup')}>Começar teste de 14 dias</Button>
-              <Button variant="ghost" size="lg" onClick={() => go('dashboard')}>Ver demo (mock) →</Button>
+              <Button variant="primary" size="lg" icon="arrowRight" onClick={() => goReal('/signup')}>{t('landing.hero.ctaPrimary')}</Button>
+              <Button variant="ghost" size="lg" onClick={() => go('dashboard')}>{t('landing.hero.ctaDemo')}</Button>
             </div>
             <div className="lp-trust">
               <span className="stars">★★★★★</span>
-              <span><b style={{ color: 'var(--ink-900)' }}>4,8/5</b> — 412 avaliações</span>
+              <span><b style={{ color: 'var(--ink-900)' }}>4,8/5</b> {t('landing.hero.ratingSuffix')}</span>
               <span style={{ color: 'var(--ink-300)' }}>•</span>
-              <span>Sem cartão · LGPD compliant</span>
+              <span>{t('landing.hero.noCard')}</span>
             </div>
           </div>
 
@@ -243,7 +245,7 @@ export default function Landing() {
 
       <section className="lp-logos">
         <div className="lp-logos-inner">
-          <span className="lp-logos-label">+1.200 operações vendendo melhor</span>
+          <span className="lp-logos-label">{t('landing.logos.label')}</span>
           <span className="lp-logo-item">CERVEJARIA RIACHO</span>
           <span className="lp-logo-item">studio glow</span>
           <span className="lp-logo-item">IMOB · NORTE</span>
@@ -256,27 +258,27 @@ export default function Landing() {
       <section className="lp-section caa" id="caa" style={{ paddingTop: 64, paddingBottom: 48 }}>
         <div className="lp-section-inner">
           <div style={{ textAlign: 'center', marginBottom: 36 }}>
-            <div className="lp-kicker">O que é o Ruptur OS</div>
-            <h2 className="lp-h2" style={{ maxWidth: 720, margin: '0 auto' }}>Trê<span style={{ color: 'var(--brand-500)' }}>s</span> verbos. Um sistema. Sua máquina de receita pelo WhatsApp.</h2>
+            <div className="lp-kicker">{t('landing.caa.kicker')}</div>
+            <h2 className="lp-h2" style={{ maxWidth: 720, margin: '0 auto' }}>{t('landing.caa.title')}</h2>
           </div>
           <div className="caa-grid">
             <div className="caa-step">
               <div className="caa-num">01</div>
               <div className="caa-ic" style={{ background: 'var(--wa-50)', color: 'var(--wa-600)' }}><Icon name="wa" size={22} /></div>
-              <h3>Conecta.</h3>
-              <p>Pluga seus números de WhatsApp em minutos via uazapi ou Cloud API. Multi-instância, multi-time, um lugar só.</p>
+              <h3>{t('landing.caa.steps.0.title')}</h3>
+              <p>{t('landing.caa.steps.0.desc')}</p>
             </div>
             <div className="caa-step">
               <div className="caa-num">02</div>
               <div className="caa-ic" style={{ background: 'var(--brand-50)', color: 'var(--brand-500)' }}><Icon name="fire" size={22} /></div>
-              <h3>Aquece.</h3>
-              <p>Warmup automático, throttling inteligente e kill switch anti-ban. Seus chips ganham reputação sem você pensar.</p>
+              <h3>{t('landing.caa.steps.1.title')}</h3>
+              <p>{t('landing.caa.steps.1.desc')}</p>
             </div>
             <div className="caa-step">
               <div className="caa-num">03</div>
               <div className="caa-ic" style={{ background: '#F5F3FF', color: '#6D28D9' }}><Icon name="sparkles" size={22} /></div>
-              <h3>Vende.</h3>
-              <p>Fluxos conversacionais, dispara, qualifica, agenda e fecha — com IA sugerindo a próxima ação em cada lead.</p>
+              <h3>{t('landing.caa.steps.2.title')}</h3>
+              <p>{t('landing.caa.steps.2.desc')}</p>
             </div>
           </div>
         </div>
@@ -285,9 +287,9 @@ export default function Landing() {
       <section className="lp-section" id="pilares">
         <div className="lp-section-inner">
           <div className="lp-section-head">
-            <div className="lp-kicker">Como funciona</div>
-            <h2 className="lp-h2">Três pilares para uma máquina de vendas previsível</h2>
-            <p className="lp-section-sub">Mesma metodologia das maiores operações B2B, adaptada ao jeito brasileiro de vender por WhatsApp.</p>
+            <div className="lp-kicker">{t('landing.sections.pillarsKicker')}</div>
+            <h2 className="lp-h2">{t('landing.sections.pillarsTitle')}</h2>
+            <p className="lp-section-sub">{t('landing.sections.pillarsSub')}</p>
           </div>
           <div className="pillars">
             <div className="pillar green">
@@ -327,9 +329,9 @@ export default function Landing() {
       <section className="lp-section lp-pricing" id="precos">
         <div className="lp-section-inner">
           <div className="lp-section-head">
-            <div className="lp-kicker">Preços</div>
-            <h2 className="lp-h2">Cresça sem reescrever o stack</h2>
-            <p className="lp-section-sub">Cobramos por workspace, não por usuário. Sem letra miúda.</p>
+            <div className="lp-kicker">{t('landing.sections.pricingKicker')}</div>
+            <h2 className="lp-h2">{t('landing.sections.pricingTitle')}</h2>
+            <p className="lp-section-sub">{t('landing.sections.pricingSub')}</p>
           </div>
           <div className="price-grid">
             <div className="price-card">
@@ -384,17 +386,17 @@ export default function Landing() {
       <section className="lp-section" id="faq">
         <div className="lp-section-inner">
           <div className="lp-section-head">
-            <div className="lp-kicker">Perguntas frequentes</div>
-            <h2 className="lp-h2">Tirando as dúvidas mais comuns</h2>
+            <div className="lp-kicker">{t('landing.sections.faqKicker')}</div>
+            <h2 className="lp-h2">{t('landing.sections.faqTitle')}</h2>
           </div>
           <FAQ />
         </div>
       </section>
 
       <section className="lp-cta-band">
-        <h2>Pronto para parar de perder lead?</h2>
-        <p>Conecte seu WhatsApp em 4 minutos e veja seu funil no mesmo dia.</p>
-        <Button variant="primary" size="lg" icon="arrowRight" onClick={() => goReal('/signup')}>Começar teste de 14 dias</Button>
+        <h2>{t('landing.ctaBand.title')}</h2>
+        <p>{t('landing.ctaBand.sub')}</p>
+        <Button variant="primary" size="lg" icon="arrowRight" onClick={() => goReal('/signup')}>{t('landing.ctaBand.cta')}</Button>
       </section>
 
       <footer className="lp-footer">
