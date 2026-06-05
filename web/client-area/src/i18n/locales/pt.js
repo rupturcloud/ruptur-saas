@@ -237,6 +237,21 @@ export const pt = {
       loading: 'Carregando...',
       noPlans: 'Planos não disponíveis no momento.',
     },
+    adminDash: {
+      tabs: {
+        overview: 'Visão Geral', tenants: 'Tenants', clients: 'Clientes', instances: 'Instâncias',
+        providers: 'APIs UAZAPI', gateways: 'Gateways', commercial: 'Comercial', tracking: 'Tracking',
+        support: 'Suporte', users: 'Usuários',
+      },
+    },
+    superAdmin: {
+      crumb: 'Ruptur OS · Plataforma',
+      title: 'Gerenciamento de Superadmin',
+      sub: 'Configure e gerencie superadministradores da plataforma Ruptur',
+      tabActive: 'Superadmins Ativos',
+      tabInvites: 'Convites Pendentes',
+      remove: 'Remover superadmin',
+    },
   },
 };
 

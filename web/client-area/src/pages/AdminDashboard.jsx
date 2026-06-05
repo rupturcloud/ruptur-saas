@@ -5,6 +5,7 @@ import { Activity, Building2, CreditCard, Database, Loader2, Plus, RefreshCw, Se
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { STATUS_MAP } from '../utils/status';
+import { useT } from '../i18n/index.jsx';
 
 const ADMIN_VIEW_TITLES = {
   overview: 'Visão Geral',
@@ -226,6 +227,7 @@ function money(cents) {
 export default function AdminDashboard() {
   const { session } = useAuth();
   const [activeView, setActiveView] = useState('overview');
+  const tr = useT();
   const [stats, setStats] = useState(null);
   const [clients, setClients] = useState([]);
   const [instances, setInstances] = useState([]);
@@ -483,22 +485,22 @@ export default function AdminDashboard() {
         <header className="admin-top-bar">
           <div>
             <div className="admin-crumb">Ruptur OS · Plataforma</div>
-            <h1>{ADMIN_VIEW_TITLES[activeView] || 'Admin'}</h1>
+            <h1>{tr('app.adminDash.tabs.' + activeView)}</h1>
           </div>
         </header>
 
         {/* Tabs horizontais — padrão laranja, dentro do AppShell */}
         <nav className="admin-tabs">
-          <button className={`admin-tab ${activeView === 'overview' ? 'active' : ''}`} onClick={() => setActiveView('overview')}><Activity size={15} /> Visão Geral</button>
-          <button className={`admin-tab ${activeView === 'tenants' ? 'active' : ''}`} onClick={() => setActiveView('tenants')}><Building2 size={15} /> Tenants</button>
-          <button className={`admin-tab ${activeView === 'clients' ? 'active' : ''}`} onClick={() => setActiveView('clients')}><Users size={15} /> Clientes</button>
-          <button className={`admin-tab ${activeView === 'instances' ? 'active' : ''}`} onClick={() => setActiveView('instances')}><Smartphone size={15} /> Instâncias</button>
-          <button className={`admin-tab ${activeView === 'providers' ? 'active' : ''}`} onClick={() => setActiveView('providers')}><Server size={15} /> APIs UAZAPI</button>
-          <button className={`admin-tab ${activeView === 'gateways' ? 'active' : ''}`} onClick={() => setActiveView('gateways')}><CreditCard size={15} /> Gateways</button>
-          <button className={`admin-tab ${activeView === 'commercial' ? 'active' : ''}`} onClick={() => setActiveView('commercial')}><Zap size={15} /> Comercial</button>
-          <button className={`admin-tab ${activeView === 'tracking' ? 'active' : ''}`} onClick={() => setActiveView('tracking')}><Activity size={15} /> Tracking</button>
-          <button className={`admin-tab ${activeView === 'support' ? 'active' : ''}`} onClick={() => setActiveView('support')}><Shield size={15} /> Suporte</button>
-          <button className={`admin-tab ${activeView === 'users' ? 'active' : ''}`} onClick={() => setActiveView('users')}><Users size={15} /> Usuários</button>
+          <button className={`admin-tab ${activeView === 'overview' ? 'active' : ''}`} onClick={() => setActiveView('overview')}><Activity size={15} /> {tr('app.adminDash.tabs.overview')}</button>
+          <button className={`admin-tab ${activeView === 'tenants' ? 'active' : ''}`} onClick={() => setActiveView('tenants')}><Building2 size={15} /> {tr('app.adminDash.tabs.tenants')}</button>
+          <button className={`admin-tab ${activeView === 'clients' ? 'active' : ''}`} onClick={() => setActiveView('clients')}><Users size={15} /> {tr('app.adminDash.tabs.clients')}</button>
+          <button className={`admin-tab ${activeView === 'instances' ? 'active' : ''}`} onClick={() => setActiveView('instances')}><Smartphone size={15} /> {tr('app.adminDash.tabs.instances')}</button>
+          <button className={`admin-tab ${activeView === 'providers' ? 'active' : ''}`} onClick={() => setActiveView('providers')}><Server size={15} /> {tr('app.adminDash.tabs.providers')}</button>
+          <button className={`admin-tab ${activeView === 'gateways' ? 'active' : ''}`} onClick={() => setActiveView('gateways')}><CreditCard size={15} /> {tr('app.adminDash.tabs.gateways')}</button>
+          <button className={`admin-tab ${activeView === 'commercial' ? 'active' : ''}`} onClick={() => setActiveView('commercial')}><Zap size={15} /> {tr('app.adminDash.tabs.commercial')}</button>
+          <button className={`admin-tab ${activeView === 'tracking' ? 'active' : ''}`} onClick={() => setActiveView('tracking')}><Activity size={15} /> {tr('app.adminDash.tabs.tracking')}</button>
+          <button className={`admin-tab ${activeView === 'support' ? 'active' : ''}`} onClick={() => setActiveView('support')}><Shield size={15} /> {tr('app.adminDash.tabs.support')}</button>
+          <button className={`admin-tab ${activeView === 'users' ? 'active' : ''}`} onClick={() => setActiveView('users')}><Users size={15} /> {tr('app.adminDash.tabs.users')}</button>
         </nav>
 
         <section className="admin-content">
