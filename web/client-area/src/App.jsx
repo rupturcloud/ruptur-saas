@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { ToastProvider as RupturToastProvider } from './ds/index.js';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './contexts/AuthContext';
+import { InboxBadgeProvider } from './contexts/InboxBadgeContext.jsx';
 
 // Público
 import LoginScreen from './pages/LoginScreen';
@@ -76,6 +77,7 @@ function App() {
 
   return (
     <RupturToastProvider>
+      <InboxBadgeProvider>
       <BrowserRouter>
         <Suspense fallback={<LoadingScreen />}>
           <Routes>
@@ -122,6 +124,7 @@ function App() {
           </Routes>
         </Suspense>
       </BrowserRouter>
+      </InboxBadgeProvider>
     </RupturToastProvider>
   );
 }

@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Zap, ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Zap, ArrowRight, Eye, EyeOff, Loader2, MessageCircle, TrendingUp, Shield, Gift } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
+/**
+ * SignUp — Criação de conta via Supabase Auth.
+ * Design V0 laranja (#FF6A3D / #0E1116), consistente com o LoginScreen.
+ * Lógica preservada: signUp(email, password, name) → /onboarding.
+ */
 export default function SignUp() {
   const navigate = useNavigate();
   const { signUp } = useAuth();
@@ -13,7 +17,7 @@ export default function SignUp() {
   const [error, setError] = useState('');
 
   const handleChange = (e) => {
-    setForm(p => ({ ...p, [e.target.name]: e.target.value }));
+    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
     setError('');
   };
 
@@ -33,95 +37,125 @@ export default function SignUp() {
   };
 
   return (
-    <div className="auth-page">
-      <motion.div className="auth-card glass" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="auth-logo">
-          <div className="logo-icon-wrap"><Zap size={22} fill="currentColor" /></div>
-          <h1 className="logo-text">RUPTUR<span>CLOUD</span></h1>
+    <div className="v0-login">
+      {/* Painel de branding — só desktop */}
+      <aside className="v0-login__brand">
+        <div className="v0-login__glow" />
+        <div className="v0-login__brand-inner">
+          <div className="v0-login__logo">
+            <span className="v0-login__mark"><Zap size={22} fill="currentColor" /></span>
+            <span className="v0-login__logo-text">Ruptur</span>
+          </div>
+          <h2 className="v0-login__headline">Comece grátis hoje.</h2>
+          <p className="v0-login__pitch">
+            50 créditos inclusos, sem cartão. Conecte seu primeiro número em minutos.
+          </p>
+          <ul className="v0-login__features">
+            <li><MessageCircle size={16} /> Múltiplos números, um único inbox</li>
+            <li><Shield size={16} /> Aquecimento anti-bloqueio</li>
+            <li><TrendingUp size={16} /> Campanhas que se otimizam sozinhas</li>
+          </ul>
         </div>
-        <h2 className="auth-title">Crie sua conta</h2>
-        <p className="auth-sub">Comece grátis com 50 créditos. Sem cartão.</p>
+      </aside>
 
-        <form onSubmit={handleSubmit} className="auth-form">
-          <div className="field">
-            <label>Nome do negócio</label>
-            <input name="name" placeholder="Ex: Murilo Rifas" value={form.name} onChange={handleChange} autoFocus />
+      {/* Form */}
+      <main className="v0-login__main">
+        <div className="v0-login__card">
+          <div className="v0-login__head">
+            <span className="v0-login__mark v0-login__mark--sm"><Zap size={18} fill="currentColor" /></span>
+            <h1>Crie sua conta</h1>
+            <p>Comece grátis com 50 créditos. Sem cartão.</p>
           </div>
-          <div className="field">
-            <label>E-mail</label>
-            <input name="email" type="email" placeholder="seu@email.com" value={form.email} onChange={handleChange} />
-          </div>
-          <div className="field">
-            <label>Senha</label>
-            <div className="pw-wrap">
-              <input name="password" type={showPw ? 'text' : 'password'} placeholder="Mínimo 6 caracteres" value={form.password} onChange={handleChange} />
-              <button type="button" className="pw-toggle" onClick={() => setShowPw(v => !v)}>
-                {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-          {error && <div className="auth-error">{error}</div>}
-          <motion.button type="submit" className="auth-btn" disabled={loading} whileTap={{ scale: 0.97 }}>
-            {loading ? <Loader2 size={20} className="spin" /> : <>Começar Grátis <ArrowRight size={18} /></>}
-          </motion.button>
-        </form>
-        <div className="auth-divider"></div>
-        <div className="auth-footer-container glass-highlight">
-          <p className="auth-footer">Já é um de nossos parceiros?</p>
-          <Link to="/login" className="login-link-highlight">
-            Acessar Minha Conta <ArrowRight size={18} />
-          </Link>
+
+          <form onSubmit={handleSubmit} autoComplete="on">
+            <label className="v0-field">
+              <span>Nome do negócio</span>
+              <div className="v0-input v0-input--plain">
+                <input name="name" placeholder="Ex: Murilo Rifas" value={form.name} onChange={handleChange} autoFocus />
+              </div>
+            </label>
+
+            <label className="v0-field">
+              <span>E-mail</span>
+              <div className="v0-input v0-input--plain">
+                <input name="email" type="email" placeholder="voce@empresa.com" value={form.email} onChange={handleChange} autoComplete="email" />
+              </div>
+            </label>
+
+            <label className="v0-field">
+              <span>Senha</span>
+              <div className="v0-input v0-input--plain">
+                <input
+                  name="password"
+                  type={showPw ? 'text' : 'password'}
+                  placeholder="Mínimo 6 caracteres"
+                  value={form.password}
+                  onChange={handleChange}
+                  autoComplete="new-password"
+                />
+                <button type="button" className="v0-input__toggle" onClick={() => setShowPw((v) => !v)} aria-label={showPw ? 'Ocultar senha' : 'Mostrar senha'}>
+                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </label>
+
+            {error && <div className="v0-login__error">{error}</div>}
+
+            <button type="submit" className="v0-login__btn" disabled={loading}>
+              {loading ? <Loader2 size={20} className="v0-spin" /> : <>Começar grátis <ArrowRight size={18} /></>}
+            </button>
+          </form>
+
+          <div className="v0-login__badge"><Gift size={15} /> 50 créditos grátis • Sem cartão</div>
+
+          <p className="v0-login__foot">
+            Já tem conta? <Link to="/login">Acessar minha conta</Link>
+          </p>
         </div>
-        <div className="trial-badge"><span>🎁</span> 50 créditos grátis inclusos • Sem cartão</div>
-      </motion.div>
+      </main>
+
       <style>{`
-        .glass-highlight {
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 16px;
-          padding: 20px;
-          margin-bottom: 24px;
-        }
-        .auth-footer { margin-bottom: 8px !important; opacity: 0.6; font-size: 0.9rem; }
-        .auth-page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg-primary,#0a0a14);padding:24px;background: radial-gradient(circle at top right, rgba(240,83,31,0.05), transparent), radial-gradient(circle at bottom left, rgba(255,106,61,0.05), transparent);}
-        .auth-card{width:100%;max-width:440px;padding:48px 40px;border-radius:24px;border:1px solid var(--border-glass);background:rgba(12,12,24,.85);backdrop-filter:blur(20px);box-shadow: 0 20px 60px rgba(0,0,0,0.5);}
-        .auth-logo{display:flex;align-items:center;gap:12px;margin-bottom:32px}
-        .auth-logo .logo-icon-wrap{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--secondary),var(--primary));display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 8px 20px rgba(240,83,31,.3)}
-        .auth-logo .logo-text{font-size:1.3rem;font-weight:800;letter-spacing:-1px;font-family:'Outfit',sans-serif}
-        .auth-logo .logo-text span{color:var(--primary)}
-        .auth-title{font-size:1.75rem;font-weight:800;margin-bottom:8px;font-family:'Outfit',sans-serif}
-        .auth-sub{font-size:1rem;color:var(--text-muted);margin-bottom:32px}
-        .auth-form{display:flex;flex-direction:column;gap:20px}
-        .auth-divider { height: 1px; background: rgba(255,255,255,0.05); margin: 32px 0; }
-        .field label{display:block;font-size:.8rem;font-weight:700;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
-        .field input{width:100%;padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid var(--border-glass);border-radius:12px;color:#fff;font-size:1rem;transition: all 0.2s;font-family:'Inter',sans-serif}
-        .field input:focus{outline:none;border-color:var(--primary);background:rgba(255,106,61,0.02);box-shadow:0 0 0 4px rgba(255,106,61,.1)}
-        .field input::placeholder{color:rgba(255,255,255,0.15)}
-        .pw-wrap{position:relative}.pw-wrap input{padding-right:42px}
-        .pw-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px}
-        .auth-error{padding:12px 16px;background:rgba(255,0,80,.1);border:1px solid rgba(255,0,80,.2);border-radius:12px;color:#ff4d6a;font-size:.88rem;margin-top:8px}
-        .auth-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:16px;background:linear-gradient(135deg,var(--secondary),var(--primary));border:none;border-radius:12px;color:#fff;font-weight:800;font-size:1.1rem;cursor:pointer;font-family:'Inter',sans-serif;box-shadow:0 10px 25px rgba(240,83,31,.3);transition:all 0.2s}
-        .auth-btn:disabled{opacity:.6;cursor:not-allowed}.auth-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 15px 35px rgba(240,83,31,.4);filter:brightness(1.1)}
-        .login-link-highlight {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          color: var(--primary);
-          text-decoration: none;
-          font-weight: 800;
-          font-size: 1rem;
-          transition: all 0.2s;
-          padding: 8px;
-          border-bottom: 2px solid transparent;
-        }
-        .login-link-highlight:hover {
-          color: #fff;
-          border-bottom-color: var(--primary);
-          transform: translateX(3px);
-        }
-        .trial-badge{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:24px;padding:12px;background:rgba(255,106,61,.05);border:1px solid rgba(255,106,61,.1);border-radius:12px;font-size:.85rem;color:var(--primary);font-weight:600}
-        @keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin .8s linear infinite}
+        .v0-login{min-height:100vh;display:flex;background:#0E1116;color:#fff;font-family:'Inter',system-ui,-apple-system,sans-serif}
+        .v0-login__brand{position:relative;flex:1 1 50%;display:none;flex-direction:column;justify-content:center;padding:56px;overflow:hidden;background:linear-gradient(160deg,#14181f 0%,#0E1116 60%);border-right:1px solid #1F242E}
+        .v0-login__glow{position:absolute;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle,rgba(255,106,61,.16),transparent 70%);top:-130px;right:-150px;pointer-events:none}
+        .v0-login__brand-inner{position:relative;z-index:2;max-width:430px}
+        .v0-login__headline{font-size:2.15rem;font-weight:800;line-height:1.12;letter-spacing:-1px;margin:0 0 16px}
+        .v0-login__pitch{font-size:1rem;color:#9CA3AF;line-height:1.55;margin:0 0 32px}
+        .v0-login__features{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:14px}
+        .v0-login__features li{display:flex;align-items:center;gap:10px;font-size:.92rem;color:#C9CFD8}
+        .v0-login__features li svg{color:#FF6A3D;flex-shrink:0}
+        .v0-login__logo{display:flex;align-items:center;gap:10px;margin-bottom:40px}
+        .v0-login__logo-text{font-size:1.3rem;font-weight:800;letter-spacing:-.5px}
+        .v0-login__mark{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,#FF6A3D,#F0531F);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 6px 20px rgba(255,106,61,.35);flex-shrink:0}
+        .v0-login__mark--sm{width:34px;height:34px;border-radius:9px}
+        .v0-login__main{flex:1 1 50%;display:flex;align-items:center;justify-content:center;padding:24px}
+        .v0-login__card{width:100%;max-width:400px}
+        .v0-login__head{margin-bottom:24px}
+        .v0-login__head .v0-login__mark{margin-bottom:18px}
+        .v0-login__head h1{font-size:1.5rem;font-weight:800;letter-spacing:-.5px;margin:0 0 6px}
+        .v0-login__head p{font-size:.9rem;color:#6B7380;margin:0}
+        .v0-field{display:block;margin-bottom:16px}
+        .v0-field>span{display:block;font-size:.82rem;font-weight:600;color:#9CA3AF;margin-bottom:7px}
+        .v0-input{position:relative;display:flex;align-items:center;background:#171B22;border:1px solid #262D3A;border-radius:11px;transition:border-color .15s,box-shadow .15s}
+        .v0-input>svg{position:absolute;left:13px;color:#6B7380;pointer-events:none}
+        .v0-input input{width:100%;padding:13px 14px 13px 42px;background:transparent;border:none;color:#fff;font-size:.95rem;font-family:inherit}
+        .v0-input--plain input{padding-left:14px}
+        .v0-input input:focus{outline:none}
+        .v0-input:focus-within{border-color:#FF6A3D;box-shadow:0 0 0 3px rgba(255,106,61,.12)}
+        .v0-input input::placeholder{color:#4B5563}
+        .v0-input__toggle{position:absolute;right:10px;background:none;border:none;color:#6B7380;cursor:pointer;padding:5px;display:flex}
+        .v0-input__toggle:hover{color:#9CA3AF}
+        .v0-login__error{padding:11px 14px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:10px;color:#f87171;font-size:.85rem;margin-bottom:16px}
+        .v0-login__btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;background:#FF6A3D;border:none;border-radius:11px;color:#fff;font-weight:700;font-size:.98rem;cursor:pointer;transition:background .15s,transform .1s;box-shadow:0 4px 16px rgba(255,106,61,.3)}
+        .v0-login__btn:hover:not(:disabled){background:#F0531F}
+        .v0-login__btn:active:not(:disabled){transform:scale(.985)}
+        .v0-login__btn:disabled{opacity:.65;cursor:not-allowed}
+        .v0-login__badge{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:18px;padding:11px;background:rgba(255,106,61,.07);border:1px solid rgba(255,106,61,.16);border-radius:10px;font-size:.84rem;color:#FF6A3D;font-weight:600}
+        .v0-login__foot{text-align:center;margin-top:18px;font-size:.88rem;color:#6B7380}
+        .v0-login__foot a{color:#FF6A3D;text-decoration:none;font-weight:600}
+        .v0-login__foot a:hover{text-decoration:underline}
+        @keyframes v0spin{to{transform:rotate(360deg)}}.v0-spin{animation:v0spin .8s linear infinite}
+        @media(min-width:900px){.v0-login__brand{display:flex}}
       `}</style>
     </div>
   );

@@ -8,11 +8,12 @@ import ForcePasswordChange from '../../components/ForcePasswordChange.jsx';
 import TenantSwitcher from './TenantSwitcher.jsx';
 import { useT } from '../../i18n/index.jsx';
 import LanguageSwitcher from '../../components/LanguageSwitcher.jsx';
+import { useInboxBadge } from '../../contexts/InboxBadgeContext.jsx';
 
 const NAV = [
   { section: 'Operação', key: 'operation', items: [
     { id: 'dashboard',   label: 'Cockpit',       icon: 'dashboard' },
-    { id: 'inbox',       label: 'Inbox',         icon: 'wa', badge: 7, badgeTone: 'wa' },
+    { id: 'inbox',       label: 'Inbox',         icon: 'wa' },
     { id: 'pipeline',    label: 'CRM',           icon: 'pipeline' },
     { id: 'grupos',      label: 'Grupos',        icon: 'leads' },
     { id: 'outreach',    label: 'Outreach X1',   icon: 'broadcast' },
@@ -41,6 +42,7 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
   const navigate = useNavigate();
   const { session, tenant, isPlatformAdmin } = useAuth();
   const t = useT();
+  const { unread } = useInboxBadge();
 
   const userName =
     session?.user?.user_metadata?.full_name ||
@@ -165,7 +167,13 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
             )}
             {collapsed && <div style={{ height: 8 }} />}
             <nav>
-              {g.items.map(it => (
+              {g.items.map(it => {
+                const isInbox = it.id === 'inbox';
+                const badgeVal = isInbox
+                  ? (unread > 0 ? (unread > 99 ? '99+' : unread) : null)
+                  : it.badge;
+                const badgeTone = isInbox ? 'wa' : (it.badgeTone || 'brand');
+                return (
                 <NavLink
                   key={it.id}
                   to={`/v0/${it.id}`}
@@ -190,11 +198,12 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
                 >
                   <Icon name={it.icon} size={15} />
                   {!collapsed && <span style={{ flex: 1 }}>{t('app.nav.' + it.id)}</span>}
-                  {!collapsed && it.badge != null && (
-                    <span className={`badge badge-${it.badgeTone || 'brand'}`}>{it.badge}</span>
+                  {!collapsed && badgeVal != null && (
+                    <span className={`badge badge-${badgeTone}`}>{badgeVal}</span>
                   )}
                 </NavLink>
-              ))}
+                );
+              })}
             </nav>
           </div>
         ))}
