@@ -1,0 +1,45 @@
+// English
+export const en = {
+  lang: { label: 'Language', pt: 'Português', en: 'English', es: 'Español' },
+  nav: {
+    product: 'Product',
+    pricing: 'Pricing',
+    blog: 'Blog',
+    login: 'Sign in',
+    signup: 'Start free',
+    dashboard: 'Dashboard',
+  },
+  footer: {
+    tagline: 'The AI-assisted revenue operating system for teams that sell on WhatsApp.',
+    group: 'A company of the',
+    colProduct: 'Product',
+    colCompany: 'Company',
+    colLegal: 'Legal',
+    connect: 'Connect',
+    warm: 'Warm up',
+    sell: 'Sell',
+    about: 'About',
+    careers: 'Careers',
+    blog: 'Blog',
+    contact: 'Contact',
+    terms: 'Terms',
+    privacy: 'Privacy',
+    lgpd: 'Data Policy',
+    status: 'Status',
+    madeBy: 'Made with 💙 by',
+    madeIn: 'São Paulo',
+    copyright: '© 2026 Ruptur Tecnologia Ltda · Brazil',
+  },
+  blog: {
+    title: 'Blog',
+    subtitle: 'Tactics, behind-the-scenes and method from people who sell on WhatsApp with predictability.',
+    readMore: 'Read article',
+    back: '← Back to blog',
+    backToSite: 'Back to site',
+    minRead: 'min read',
+    published: 'Published on',
+    notFound: 'Article not found.',
+  },
+};
+
+export default en;

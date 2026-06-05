@@ -32,6 +32,10 @@ const IntegrationsV2 = lazy(() => import('./v2/pages/Integrations.jsx'));
 const BillingV2      = lazy(() => import('./v2/pages/Billing.jsx'));
 const PlaceholderV2  = lazy(() => import('./v2/pages/Placeholder.jsx'));
 
+// Blog público (i18n pt/en/es)
+const Blog     = lazy(() => import('./v2/pages/Blog.jsx'));
+const BlogPost = lazy(() => import('./v2/pages/BlogPost.jsx'));
+
 // Admin plataforma (super admin)
 const AdminDashboard      = lazy(() => import('./pages/AdminDashboard.jsx'));
 const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard.jsx'));
@@ -81,6 +85,8 @@ function App() {
             <Route path="/admin/accept-invite" element={<AcceptAdminInvite />} />
             <Route path="/403"    element={<AccessDenied />} />
             <Route path="/health" element={<Health />} />
+            <Route path="/blog"        element={<Blog />} />
+            <Route path="/blog/:slug"  element={<BlogPost />} />
 
             {/* V0 landing pública */}
             <Route path="/v0/landing" element={<LandingV2 />} />

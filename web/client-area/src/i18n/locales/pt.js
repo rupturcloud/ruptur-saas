@@ -1,0 +1,45 @@
+// pt-BR — idioma padrão (default)
+export const pt = {
+  lang: { label: 'Idioma', pt: 'Português', en: 'English', es: 'Español' },
+  nav: {
+    product: 'Produto',
+    pricing: 'Preços',
+    blog: 'Blog',
+    login: 'Entrar',
+    signup: 'Começar grátis',
+    dashboard: 'Painel',
+  },
+  footer: {
+    tagline: 'Sistema operacional de receita assistido por IA para quem vende pelo WhatsApp.',
+    group: 'Uma empresa do grupo',
+    colProduct: 'Produto',
+    colCompany: 'Empresa',
+    colLegal: 'Legal',
+    connect: 'Conecta',
+    warm: 'Aquece',
+    sell: 'Vende',
+    about: 'Sobre',
+    careers: 'Carreiras',
+    blog: 'Blog',
+    contact: 'Contato',
+    terms: 'Termos',
+    privacy: 'Privacidade',
+    lgpd: 'LGPD',
+    status: 'Status',
+    madeBy: 'Feito com 💙 por',
+    madeIn: 'São Paulo',
+    copyright: '© 2026 Ruptur Tecnologia Ltda · CNPJ 00.000.000/0001-00',
+  },
+  blog: {
+    title: 'Blog',
+    subtitle: 'Táticas, bastidores e método de quem vende pelo WhatsApp com previsibilidade.',
+    readMore: 'Ler artigo',
+    back: '← Voltar ao blog',
+    backToSite: 'Voltar ao site',
+    minRead: 'min de leitura',
+    published: 'Publicado em',
+    notFound: 'Artigo não encontrado.',
+  },
+};
+
+export default pt;

@@ -182,6 +182,7 @@ export default function Landing() {
             <a href="#personas" onClick={(e) => { e.preventDefault(); go('personas'); }}>Para quem</a>
             <a href="#precos">Preços</a>
             <a href="#faq">FAQ</a>
+            <a href="/blog">Blog</a>
           </nav>
           <div className="lp-nav-cta">
             <Button variant="ghost" size="sm" onClick={() => goReal('/login')}>Entrar</Button>
@@ -405,14 +406,15 @@ export default function Landing() {
                 <span>Ruptur OS</span>
               </div>
               <p style={{ color: 'var(--ink-600)', fontSize: 13.5, margin: 0, maxWidth: 320 }}>Sistema operacional de receita assistido por IA para quem vende pelo WhatsApp.</p>
+              <p style={{ color: 'var(--ink-500)', fontSize: 12.5, margin: '12px 0 0', maxWidth: 320 }}>Uma empresa do grupo <a href="https://2dlcompany.com.br" target="_blank" rel="noopener" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>2DL Company</a>.</p>
             </div>
             <div><h4>Produto</h4><ul><li><a href="#caa">Conecta</a></li><li><a href="#caa">Aquece</a></li><li><a href="#caa">Vende</a></li><li><a href="#precos">Preços</a></li></ul></div>
-            <div><h4>Empresa</h4><ul><li><a href="#">Sobre</a></li><li><a href="#">Carreiras</a></li><li><a href="#">Blog</a></li><li><a href="#">Contato</a></li></ul></div>
+            <div><h4>Empresa</h4><ul><li><a href="#">Sobre</a></li><li><a href="#">Carreiras</a></li><li><a href="/blog">Blog</a></li><li><a href="#">Contato</a></li></ul></div>
             <div><h4>Legal</h4><ul><li><a href="#">Termos</a></li><li><a href="#">Privacidade</a></li><li><a href="#">LGPD</a></li><li><a href="#">Status</a></li></ul></div>
           </div>
           <div className="lp-footer-bottom">
             <span>© 2026 Ruptur Tecnologia Ltda · CNPJ 00.000.000/0001-00</span>
-            <span>Feito em São Paulo · 🇧🇷</span>
+            <span>Feito com 💙 por <a href="https://2dlcompany.com.br" target="_blank" rel="noopener" style={{ color: 'var(--brand-600)', fontWeight: 600 }}>2DL Company</a> · São Paulo 🇧🇷</span>
           </div>
         </div>
       </footer>

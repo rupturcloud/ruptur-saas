@@ -1,0 +1,45 @@
+// Español
+export const es = {
+  lang: { label: 'Idioma', pt: 'Português', en: 'English', es: 'Español' },
+  nav: {
+    product: 'Producto',
+    pricing: 'Precios',
+    blog: 'Blog',
+    login: 'Entrar',
+    signup: 'Empezar gratis',
+    dashboard: 'Panel',
+  },
+  footer: {
+    tagline: 'El sistema operativo de ingresos asistido por IA para quienes venden por WhatsApp.',
+    group: 'Una empresa del grupo',
+    colProduct: 'Producto',
+    colCompany: 'Empresa',
+    colLegal: 'Legal',
+    connect: 'Conecta',
+    warm: 'Calienta',
+    sell: 'Vende',
+    about: 'Acerca de',
+    careers: 'Carreras',
+    blog: 'Blog',
+    contact: 'Contacto',
+    terms: 'Términos',
+    privacy: 'Privacidad',
+    lgpd: 'Datos',
+    status: 'Estado',
+    madeBy: 'Hecho con 💙 por',
+    madeIn: 'São Paulo',
+    copyright: '© 2026 Ruptur Tecnologia Ltda · Brasil',
+  },
+  blog: {
+    title: 'Blog',
+    subtitle: 'Tácticas, bastidores y método de quienes venden por WhatsApp con previsibilidad.',
+    readMore: 'Leer artículo',
+    back: '← Volver al blog',
+    backToSite: 'Volver al sitio',
+    minRead: 'min de lectura',
+    published: 'Publicado el',
+    notFound: 'Artículo no encontrado.',
+  },
+};
+
+export default es;
