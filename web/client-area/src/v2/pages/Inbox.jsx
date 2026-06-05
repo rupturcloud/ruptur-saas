@@ -359,6 +359,19 @@ const STYLES = `
     .ibx-rail .lbl, .ibx-rail-title, .ibx-rail-instname span, .ibx-live span { display: none; }
     .ibx-list { width: 280px; }
   }
+
+  /* Mobile-first: telas pequenas mostram UMA região por vez (lista ↔ thread). */
+  .ibx-back { display: none; }
+  @media (max-width: 640px) {
+    .ibx { height: calc(100vh - 116px); border-radius: 10px; margin-top: 8px; }
+    .ibx-rail { width: 46px; }
+    .ibx-rail .lbl, .ibx-rail-title, .ibx-rail-instname span, .ibx-live span { display: none; }
+    .ibx-list { flex: 1; width: auto; min-width: 0; }
+    .ibx-thread { position: absolute; inset: 0; z-index: 8; display: none; }
+    .ibx.has-active .ibx-rail, .ibx.has-active .ibx-list { display: none; }
+    .ibx.has-active .ibx-thread { display: flex; }
+    .ibx.has-active .ibx-back { display: inline-flex; }
+  }
 `;
 
 // ---------------------------------------------------------------------------
@@ -790,7 +803,7 @@ export default function Inbox() {
       <style>{STYLES}</style>
       <PageHeader title="Inbox" sub="Conversas WhatsApp · atribuição, etiquetas e tempo real" />
 
-      <div className="ibx" style={{ position: 'relative' }}>
+      <div className={`ibx${activeChat ? ' has-active' : ''}`} style={{ position: 'relative' }}>
         {/* ── 1. Rail de filtros ── */}
         <div className="ibx-rail">
           <div className="ibx-rail-inst">
@@ -873,11 +886,24 @@ export default function Inbox() {
                 <div className="icon">💬</div>
                 <div className="label">
                   {search ? 'Nenhuma conversa encontrada.'
+                    : instances.length === 0 ? 'Nenhuma instância neste workspace.\nTroque de workspace no topo ou conecte um número em Números.'
                     : tab === 'mine' ? 'Nenhuma conversa atribuída a você.'
                     : tab === 'unassigned' ? 'Nenhuma conversa sem atendente.'
-                    : !instanceKey ? 'Conecte um número em Números.'
+                    : !instanceKey ? 'Selecione uma instância acima.'
                     : 'Nenhuma conversa ainda.\nAguardando mensagens…'}
                 </div>
+                {!search && instances.length > 0 && (tab === 'mine' || tab === 'unassigned') && (
+                  <button
+                    onClick={() => setTab('all')}
+                    style={{
+                      marginTop: 4, padding: '7px 14px', borderRadius: 8, cursor: 'pointer',
+                      border: '1px solid var(--brand-300, #FFBFAB)', background: 'var(--brand-50, #FFF4F1)',
+                      color: 'var(--brand-600, #E0531F)', fontSize: 12.5, fontWeight: 700,
+                    }}
+                  >
+                    Ver em &quot;Todas&quot; &rarr;
+                  </button>
+                )}
               </div>
             )}
             {!chatsLoading && filteredChats.map(chat => {
@@ -906,6 +932,9 @@ export default function Inbox() {
           ) : (
             <>
               <div className="ibx-thread-head">
+                <button className="ibx-back ibx-iconbtn" onClick={() => setActiveChat(null)} title="Voltar" style={{ marginRight: 2 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="15 18 9 12 15 6" /></svg>
+                </button>
                 <div className={`ibx-ava${activeIsGroup ? ' group' : ''}`}>{activeIsGroup ? '👥' : initials(activeName)}</div>
                 <div className="meta">
                   <div className="name">{activeName}</div>
