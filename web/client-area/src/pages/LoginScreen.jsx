@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Zap, Lock, Mail, Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, ArrowRight, Loader2, Zap, MessageCircle, TrendingUp, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 /**
- * LoginScreen — Autenticação via Supabase Auth
+ * LoginScreen — Autenticação via Supabase Auth.
+ * Design V0 laranja (#FF6A3D / #0E1116), split-screen: branding + form.
+ * Lógica de auth preservada: signIn, ?next, signup link.
  */
 const LoginScreen = () => {
   const navigate = useNavigate();
@@ -27,7 +28,7 @@ const LoginScreen = () => {
     try {
       await signIn(email, password);
       const next = searchParams.get('next');
-      navigate(next || '/dashboard');
+      navigate(next || '/v0/dashboard');
     } catch (err) {
       if (err.message?.includes('Invalid login')) {
         setError('E-mail ou senha incorretos.');
@@ -40,77 +41,136 @@ const LoginScreen = () => {
   };
 
   return (
-    <div className="login-screen">
-      <div className="orb orb-1" />
-      <div className="orb orb-2" />
-      <div className="orb orb-3" />
-
-      <motion.div className="login-card glass" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        {/* Logo */}
-        <div className="login-header">
-          <motion.div className="logo-glow" initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ type: 'spring' }}>
-            <Zap size={28} fill="currentColor" />
-          </motion.div>
-          <h1>RUPTUR<span>CLOUD</span></h1>
-          <p className="login-subtitle">Automação WhatsApp</p>
+    <div className="v0-login">
+      {/* Painel de branding — só desktop */}
+      <aside className="v0-login__brand">
+        <div className="v0-login__glow" />
+        <div className="v0-login__brand-inner">
+          <div className="v0-login__logo">
+            <span className="v0-login__mark"><Zap size={22} fill="currentColor" /></span>
+            <span className="v0-login__logo-text">Ruptur</span>
+          </div>
+          <h2 className="v0-login__headline">A máquina de vendas no WhatsApp.</h2>
+          <p className="v0-login__pitch">
+            Conecta seus números, aquece com segurança e vende no automático.
+          </p>
+          <ul className="v0-login__features">
+            <li><MessageCircle size={16} /> Múltiplos números, um único inbox</li>
+            <li><Shield size={16} /> Aquecimento anti-bloqueio</li>
+            <li><TrendingUp size={16} /> Campanhas que se otimizam sozinhas</li>
+          </ul>
         </div>
+      </aside>
 
-        <form onSubmit={handleSubmit} className="login-form" autoComplete="on">
-          <div className="input-group">
-            <div className="input-icon"><Mail size={18} /></div>
-            <input type="email" placeholder="Seu e-mail" value={email} onChange={e => { setEmail(e.target.value); setError(''); }} autoFocus autoComplete="email" />
+      {/* Form */}
+      <main className="v0-login__main">
+        <div className="v0-login__card">
+          <div className="v0-login__head">
+            <span className="v0-login__mark v0-login__mark--sm"><Zap size={18} fill="currentColor" /></span>
+            <h1>Entrar na Ruptur</h1>
+            <p>Acesse seu painel de automação</p>
           </div>
 
-          <div className="input-group">
-            <div className="input-icon"><Lock size={18} /></div>
-            <input type={showPass ? 'text' : 'password'} placeholder="Sua senha" value={password} onChange={e => { setPassword(e.target.value); setError(''); }} autoComplete="current-password" />
-            <button type="button" className="pass-toggle" onClick={() => setShowPass(v => !v)}>
-              {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+          <form onSubmit={handleSubmit} autoComplete="on">
+            <label className="v0-field">
+              <span>E-mail</span>
+              <div className="v0-input">
+                <Mail size={18} />
+                <input
+                  type="email"
+                  placeholder="voce@empresa.com"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                  autoFocus
+                  autoComplete="email"
+                />
+              </div>
+            </label>
+
+            <label className="v0-field">
+              <span>Senha</span>
+              <div className="v0-input">
+                <Lock size={18} />
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className="v0-input__toggle"
+                  onClick={() => setShowPass((v) => !v)}
+                  aria-label={showPass ? 'Ocultar senha' : 'Mostrar senha'}
+                >
+                  {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </label>
+
+            {error && <div className="v0-login__error">{error}</div>}
+
+            <button type="submit" className="v0-login__btn" disabled={loading}>
+              {loading ? <Loader2 size={20} className="v0-spin" /> : <>Entrar <ArrowRight size={18} /></>}
             </button>
-          </div>
+          </form>
 
-          {error && (
-            <motion.div className="login-error" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-              {error}
-            </motion.div>
-          )}
-
-          <motion.button type="submit" className="login-btn" disabled={loading} whileTap={{ scale: 0.97 }}>
-            {loading ? <Loader2 size={20} className="spin" /> : <><span>Entrar</span> <ArrowRight size={18} /></>}
-          </motion.button>
-        </form>
-
-        <p className="login-footer">
-          Não tem conta? <Link to="/signup">Criar conta grátis</Link>
-        </p>
-      </motion.div>
+          <p className="v0-login__foot">
+            Não tem conta? <Link to="/signup">Criar conta grátis</Link>
+          </p>
+        </div>
+      </main>
 
       <style>{`
-        .login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:var(--bg-primary,#06060e)}
-        .orb{position:absolute;border-radius:50%;filter:blur(120px);opacity:.15;pointer-events:none}
-        .orb-1{width:400px;height:400px;background:var(--secondary,#F0531F);top:-100px;left:-100px}
-        .orb-2{width:300px;height:300px;background:var(--primary,#FF6A3D);bottom:-50px;right:-50px}
-        .orb-3{width:200px;height:200px;background:var(--accent,#ff007a);top:50%;left:50%;transform:translate(-50%,-50%)}
-        .login-card{width:100%;max-width:400px;padding:48px 40px;border-radius:20px;background:rgba(12,12,24,.7);border:1px solid var(--border-glass,rgba(255,255,255,.06));backdrop-filter:blur(24px);position:relative;z-index:10}
-        .login-header{text-align:center;margin-bottom:36px}
-        .logo-glow{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--secondary),var(--primary));display:flex;align-items:center;justify-content:center;margin:0 auto 16px;color:#fff;box-shadow:0 6px 24px rgba(240,83,31,.4)}
-        .login-header h1{font-size:1.4rem;font-weight:800;letter-spacing:-0.5px;font-family:'Outfit',sans-serif}
-        .login-header h1 span{color:var(--primary)}
-        .login-subtitle{font-size:.82rem;color:var(--text-muted);margin-top:4px}
-        .login-form{display:flex;flex-direction:column;gap:16px}
-        .input-group{position:relative;display:flex;align-items:center}
-        .input-icon{position:absolute;left:14px;color:var(--text-muted);display:flex;z-index:2}
-        .input-group input{width:100%;padding:14px 14px 14px 44px;background:rgba(255,255,255,.04);border:1px solid var(--border-glass);border-radius:12px;color:#fff;font-size:.95rem;transition:border-color .2s;font-family:'Inter',sans-serif}
-        .input-group input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(255,106,61,.1)}
-        .input-group input::placeholder{color:rgba(255,255,255,.2)}
-        .pass-toggle{position:absolute;right:12px;background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;z-index:2}
-        .login-error{padding:10px 14px;background:rgba(255,0,80,.1);border:1px solid rgba(255,0,80,.2);border-radius:10px;color:#ff4d6a;font-size:.85rem}
-        .login-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;background:linear-gradient(135deg,var(--secondary),var(--primary));border:none;border-radius:12px;color:#fff;font-weight:700;font-size:1rem;cursor:pointer;box-shadow:0 4px 20px rgba(240,83,31,.35);transition:opacity .2s;margin-top:4px}
-        .login-btn:disabled{opacity:.6;cursor:not-allowed}.login-btn:hover:not(:disabled){opacity:.9}
-        .login-footer{text-align:center;margin-top:24px;font-size:.88rem;color:var(--text-muted)}
-        .login-footer a{color:var(--primary);text-decoration:none;font-weight:600}
-        .login-footer a:hover{text-decoration:underline}
-        @keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin .8s linear infinite}
+        .v0-login{min-height:100vh;display:flex;background:#0E1116;color:#fff;font-family:'Inter',system-ui,-apple-system,sans-serif}
+
+        /* Branding (esquerda, desktop) */
+        .v0-login__brand{position:relative;flex:1 1 50%;display:none;flex-direction:column;justify-content:center;padding:56px;overflow:hidden;background:linear-gradient(160deg,#14181f 0%,#0E1116 60%);border-right:1px solid #1F242E}
+        .v0-login__glow{position:absolute;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle,rgba(255,106,61,.16),transparent 70%);top:-130px;right:-150px;pointer-events:none}
+        .v0-login__brand-inner{position:relative;z-index:2;max-width:430px}
+        .v0-login__headline{font-size:2.15rem;font-weight:800;line-height:1.12;letter-spacing:-1px;margin:0 0 16px}
+        .v0-login__pitch{font-size:1rem;color:#9CA3AF;line-height:1.55;margin:0 0 32px}
+        .v0-login__features{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:14px}
+        .v0-login__features li{display:flex;align-items:center;gap:10px;font-size:.92rem;color:#C9CFD8}
+        .v0-login__features li svg{color:#FF6A3D;flex-shrink:0}
+
+        /* Marca / logo */
+        .v0-login__logo{display:flex;align-items:center;gap:10px;margin-bottom:40px}
+        .v0-login__logo-text{font-size:1.3rem;font-weight:800;letter-spacing:-.5px}
+        .v0-login__mark{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,#FF6A3D,#F0531F);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 6px 20px rgba(255,106,61,.35);flex-shrink:0}
+        .v0-login__mark--sm{width:34px;height:34px;border-radius:9px}
+
+        /* Form (direita) */
+        .v0-login__main{flex:1 1 50%;display:flex;align-items:center;justify-content:center;padding:24px}
+        .v0-login__card{width:100%;max-width:400px}
+        .v0-login__head{margin-bottom:28px}
+        .v0-login__head .v0-login__mark{margin-bottom:18px}
+        .v0-login__head h1{font-size:1.5rem;font-weight:800;letter-spacing:-.5px;margin:0 0 6px}
+        .v0-login__head p{font-size:.9rem;color:#6B7380;margin:0}
+
+        .v0-field{display:block;margin-bottom:16px}
+        .v0-field>span{display:block;font-size:.82rem;font-weight:600;color:#9CA3AF;margin-bottom:7px}
+        .v0-input{position:relative;display:flex;align-items:center;background:#171B22;border:1px solid #262D3A;border-radius:11px;transition:border-color .15s,box-shadow .15s}
+        .v0-input>svg{position:absolute;left:13px;color:#6B7380;pointer-events:none}
+        .v0-input input{width:100%;padding:13px 14px 13px 42px;background:transparent;border:none;color:#fff;font-size:.95rem;font-family:inherit}
+        .v0-input input:focus{outline:none}
+        .v0-input:focus-within{border-color:#FF6A3D;box-shadow:0 0 0 3px rgba(255,106,61,.12)}
+        .v0-input input::placeholder{color:#4B5563}
+        .v0-input__toggle{position:absolute;right:10px;background:none;border:none;color:#6B7380;cursor:pointer;padding:5px;display:flex}
+        .v0-input__toggle:hover{color:#9CA3AF}
+
+        .v0-login__error{padding:11px 14px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:10px;color:#f87171;font-size:.85rem;margin-bottom:16px}
+        .v0-login__btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;background:#FF6A3D;border:none;border-radius:11px;color:#fff;font-weight:700;font-size:.98rem;cursor:pointer;transition:background .15s,transform .1s;box-shadow:0 4px 16px rgba(255,106,61,.3)}
+        .v0-login__btn:hover:not(:disabled){background:#F0531F}
+        .v0-login__btn:active:not(:disabled){transform:scale(.985)}
+        .v0-login__btn:disabled{opacity:.65;cursor:not-allowed}
+        .v0-login__foot{text-align:center;margin-top:22px;font-size:.88rem;color:#6B7380}
+        .v0-login__foot a{color:#FF6A3D;text-decoration:none;font-weight:600}
+        .v0-login__foot a:hover{text-decoration:underline}
+        @keyframes v0spin{to{transform:rotate(360deg)}}.v0-spin{animation:v0spin .8s linear infinite}
+
+        @media(min-width:900px){.v0-login__brand{display:flex}}
       `}</style>
     </div>
   );
