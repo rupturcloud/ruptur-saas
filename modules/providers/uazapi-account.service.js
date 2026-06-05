@@ -208,24 +208,38 @@ export class UazapiAccountService {
     return data.id;
   }
 
+  // Resolve o tenant dono de um provider_account quando ele é dedicado (1:1).
+  // Usado como fallback no sync para instâncias sem tenant no adminField.
+  async tenantForAccount(providerAccountId) {
+    const { data } = await this.supabase
+      .from('tenant_providers')
+      .select('tenant_id')
+      .eq('account_id', providerAccountId);
+    const tenants = [...new Set((data || []).map((t) => t.tenant_id).filter(Boolean))];
+    return tenants.length === 1 ? tenants[0] : null;
+  }
+
   async syncAccount(id, actorUserId) {
     const account = await this.getAccount(id);
     const adapter = this.adapterFor(account);
     const instances = await adapter.listInstances();
     let upserted = 0;
 
+    // Instâncias sem tenant no adminField caem no tenant do tenant_provider
+    // dedicado a este account (account 1:1 com tenant).
+    const fallbackTenantId = await this.tenantForAccount(account.id);
+
     for (const instance of instances) {
-      const tenantId = extractTenantId(instance);
+      const tenantId = extractTenantId(instance) || fallbackTenantId;
       if (!tenantId) continue;
       const tenantProviderId = await this.ensureTenantProvider(tenantId, account);
-      const remoteId = instance.id;
+      const remoteId = instance.id; // normalizeInstance.id = raw.token (token UAZAPI) || raw.id
       if (!remoteId) continue;
 
       const { error } = await this.supabase
         .from('instance_registry')
         .upsert({
           tenant_provider_id: tenantProviderId,
-          tenant_id: tenantId,
           provider_account_id: account.id,
           remote_instance_id: remoteId,
           remote_account_id: account.server_url,
@@ -313,7 +327,6 @@ export class UazapiAccountService {
       .from('instance_registry')
       .upsert({
         tenant_provider_id: tenantProviderId,
-        tenant_id: tenantId,
         provider_account_id: account.id,
         remote_instance_id: remoteId,
         remote_account_id: account.server_url,
@@ -322,15 +335,14 @@ export class UazapiAccountService {
         instance_name: instance.name || name,
         is_business: Boolean(instance.isBusiness),
         platform: instance.platform,
-        metadata: { ...(instance.metadata || {}), createdBy: 'ruptur-platform' },
+        metadata: { ...(instance.metadata || {}), createdBy: 'ruptur-platform', lease: { leaseType, expiresAt } },
         lifecycle,
-        expires_at: expiresAt,
         source: 'created_by_platform',
         token_last4: tokenLast4(remoteId),
         last_seen_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'tenant_provider_id,remote_instance_id' })
-      .select('id, tenant_id, provider_account_id, remote_instance_id, status, instance_name, token_last4, lifecycle, expires_at, created_at')
+      .select('id, provider_account_id, remote_instance_id, status, instance_name, token_last4, lifecycle')
       .single();
     if (registryError) throw registryError;
 
