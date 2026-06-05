@@ -65,6 +65,43 @@ export class CampaignManager {
     this.activeCampaigns = new Map(); // id -> campanha em envio
     this.sendingQueue = [];           // fila in-memory de envio (ITEM A3: Bull)
     this.isProcessing = false;
+    this._schedulerTimer = null;
+    this.startScheduler();
+  }
+
+  /**
+   * Scheduler de campanhas AGENDADAS (status 'scheduled' com scheduled_at <= agora).
+   * Tick leve a cada 60s — substitui o mock que só logava. Auto-contido (não depende
+   * de Bull/Redis nem de mudança no gateway). O CampaignManager é singleton.
+   */
+  startScheduler() {
+    if (this._schedulerTimer) return;
+    const TICK_MS = 60 * 1000;
+    this._schedulerTimer = setInterval(() => {
+      this.processScheduledCampaigns().catch((e) => console.error('[Campaigns] scheduler tick falhou:', e && e.message));
+    }, TICK_MS);
+    if (this._schedulerTimer.unref) this._schedulerTimer.unref();
+    console.log('[Campaigns] scheduler de campanhas agendadas ativo (tick 60s)');
+  }
+
+  /** Busca campanhas agendadas cujo horário chegou e dispara cada uma (launchCampaign). */
+  async processScheduledCampaigns() {
+    const nowIso = new Date().toISOString();
+    const { data: due, error } = await this.supabase
+      .from('campaigns')
+      .select('id, name')
+      .eq('status', 'scheduled')
+      .lte('scheduled_at', nowIso)
+      .limit(20);
+    if (error) { console.error('[Campaigns] processScheduledCampaigns:', error.message); return; }
+    for (const c of (due || [])) {
+      try {
+        console.log('[Campaigns] disparando campanha agendada', c.id, c.name || '');
+        await this.launchCampaign(c.id);
+      } catch (e) {
+        console.error('[Campaigns] falha ao disparar agendada', c.id, e && e.message);
+      }
+    }
   }
 
   // =========================================================================
