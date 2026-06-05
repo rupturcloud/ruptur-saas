@@ -24,6 +24,7 @@ import { PageHeader } from '../../ds/index.js';
 import { inboxApi } from '../../api/inbox.api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useInboxBadge } from '../../contexts/InboxBadgeContext.jsx';
+import { useT } from '../../i18n/index.jsx';
 
 // ---------------------------------------------------------------------------
 // Estilos — escopo local, paleta V0 (var(--ink-*) clara + thread escuro WhatsApp)
@@ -515,6 +516,7 @@ function Bubble({ msg }) {
 // Componente principal
 // ---------------------------------------------------------------------------
 export default function Inbox() {
+  const tr = useT();
   const { authReady, user, tenantId } = useAuth();
   const { setUnread } = useInboxBadge();
   const userId = user?.id || null;
@@ -788,7 +790,7 @@ export default function Inbox() {
   return (
     <>
       <style>{STYLES}</style>
-      <PageHeader title="Inbox" sub="Conversas WhatsApp · atribuição, etiquetas e tempo real" />
+      <PageHeader title={tr('app.inbox.title')} sub={tr('app.inbox.sub')} />
 
       <div className="ibx" style={{ position: 'relative' }}>
         {/* ── 1. Rail de filtros ── */}
@@ -831,7 +833,7 @@ export default function Inbox() {
 
           <div className="ibx-rail-section">
             <div className="ibx-rail-title">Etiquetas</div>
-            {labels.length === 0 && <div className="ibx-rail-empty">Nenhuma etiqueta</div>}
+            {labels.length === 0 && <div className="ibx-rail-empty">{tr('app.inbox.noLabels')}</div>}
             {labels.map(l => {
               const key = l.id ?? l.name;
               return (
@@ -860,7 +862,7 @@ export default function Inbox() {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ color: 'var(--ink-400)', flexShrink: 0 }}>
                 <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
-              <input type="text" placeholder="Buscar conversa…" value={search} onChange={e => setSearch(e.target.value)} />
+              <input type="text" placeholder={tr('app.inbox.searchPlaceholder')} value={search} onChange={e => setSearch(e.target.value)} />
             </div>
           </div>
           <div className="ibx-chats">
@@ -872,11 +874,11 @@ export default function Inbox() {
               <div className="ibx-empty light" style={{ minHeight: 220 }}>
                 <div className="icon">💬</div>
                 <div className="label">
-                  {search ? 'Nenhuma conversa encontrada.'
-                    : tab === 'mine' ? 'Nenhuma conversa atribuída a você.'
-                    : tab === 'unassigned' ? 'Nenhuma conversa sem atendente.'
-                    : !instanceKey ? 'Conecte um número em Números.'
-                    : 'Nenhuma conversa ainda.\nAguardando mensagens…'}
+                  {search ? tr('app.inbox.emptySearch')
+                    : tab === 'mine' ? tr('app.inbox.emptyMine')
+                    : tab === 'unassigned' ? tr('app.inbox.emptyUnassigned')
+                    : !instanceKey ? tr('app.inbox.emptyNoInstance')
+                    : tr('app.inbox.emptyWaiting')}
                 </div>
               </div>
             )}
@@ -914,7 +916,7 @@ export default function Inbox() {
                 <button
                   className={`ibx-iconbtn${showPanel ? ' on' : ''}`}
                   onClick={() => setShowPanel(v => !v)}
-                  title="Detalhes do contato"
+                  title={tr('app.inbox.contactDetails')}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
@@ -944,7 +946,7 @@ export default function Inbox() {
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                   disabled={sending}
                 />
-                <button className="ibx-send" onClick={handleSend} disabled={sending || !replyText.trim()} title="Enviar">
+                <button className="ibx-send" onClick={handleSend} disabled={sending || !replyText.trim()} title={tr('app.inbox.send')}>
                   {sending
                     ? <span className="ibx-spin" style={{ width: 14, height: 14 }} />
                     : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>}
@@ -987,7 +989,7 @@ export default function Inbox() {
               <h4>Etiquetas do lead</h4>
               <div className="ibx-tagrow">
                 {activeTags.map(t => (
-                  <span key={t} className="ibx-tagchip">{t}<button onClick={() => removeTag(t)} title="Remover">×</button></span>
+                  <span key={t} className="ibx-tagchip">{t}<button onClick={() => removeTag(t)} title={tr('app.inbox.remove')}>×</button></span>
                 ))}
               </div>
               <input
