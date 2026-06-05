@@ -191,6 +191,26 @@ export const en = {
       emptyText: 'Connect a WhatsApp instance first to start warming up.',
       goNumbers: 'Go to Numbers',
     },
+    integrations: {
+      title: 'Integrations',
+      sub: 'Configure the WhatsApp providers and system webhooks',
+      uazapiSection: 'UAZAPI — WhatsApp Provider',
+      uazapiSub: 'WhatsApp instances via API · free tier and dedicated server',
+      webhookSection: 'Global Webhook',
+      webhookName: 'Inbound webhook',
+      webhookSub: 'Receive events from all instances on a single endpoint',
+    },
+    admin: {
+      crumbSystem: 'System', crumbSettings: 'Settings',
+      title: 'Admin',
+      sub: 'Workspace, team, integrations and security',
+      comingSoon: 'Under construction — available soon.',
+      tabs: {
+        users: 'Users & roles', workspace: 'Workspace', conta: 'Account',
+        billing: 'Billing', notifs: 'Notifications', lgpd: 'Privacy & LGPD',
+        conectores: 'Connectors', permissions: 'Permissions', uazapi: 'uazapi instances', webhooks: 'Webhooks',
+      },
+    },
   },
 };
 

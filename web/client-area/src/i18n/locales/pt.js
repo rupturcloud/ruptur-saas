@@ -191,6 +191,26 @@ export const pt = {
       emptyText: 'Conecte uma instância WhatsApp primeiro para iniciar o aquecimento.',
       goNumbers: 'Ir para Números',
     },
+    integrations: {
+      title: 'Integrações',
+      sub: 'Configure os provedores de WhatsApp e webhooks do sistema',
+      uazapiSection: 'UAZAPI — Provedor WhatsApp',
+      uazapiSub: 'Instâncias WhatsApp via API · free tier e servidor dedicado',
+      webhookSection: 'Webhook Global',
+      webhookName: 'Webhook de entrada',
+      webhookSub: 'Receba eventos de todas as instâncias num único endpoint',
+    },
+    admin: {
+      crumbSystem: 'Sistema', crumbSettings: 'Configurações',
+      title: 'Admin',
+      sub: 'Workspace, equipe, integrações e segurança',
+      comingSoon: 'Em construção — disponível em breve.',
+      tabs: {
+        users: 'Usuários e papéis', workspace: 'Workspace', conta: 'Conta',
+        billing: 'Cobrança', notifs: 'Notificações', lgpd: 'Privacidade & LGPD',
+        conectores: 'Conectores', permissions: 'Permissões', uazapi: 'Instâncias uazapi', webhooks: 'Webhooks',
+      },
+    },
   },
 };
 

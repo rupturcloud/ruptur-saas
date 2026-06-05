@@ -13,6 +13,7 @@ import {
   PageHeader, Button, Modal, Input, Icon,
 } from '../../ds/index.js';
 import { useToast } from '../../ds/toast.js';
+import { useT } from '../../i18n/index.jsx';
 import { providerApi } from '../../api/admin.api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 
@@ -1107,11 +1108,12 @@ function WebhooksTab() {
 // ─── Aba genérica: Placeholder ────────────────────────────────────────────────
 
 function ComingSoonTab({ label }) {
+  const tr = useT();
   return (
     <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-400)' }}>
       <Icon name="sparkles" size={36} />
       <div style={{ marginTop: 14, fontWeight: 600, color: 'var(--ink-600)', fontSize: 15 }}>{label}</div>
-      <div style={{ fontSize: 13, marginTop: 4 }}>Em construção — disponível em breve.</div>
+      <div style={{ fontSize: 13, marginTop: 4 }}>{tr('app.admin.comingSoon')}</div>
     </div>
   );
 }
@@ -1135,6 +1137,7 @@ const TABS = [
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState('users');
+  const tr = useT();
 
   const currentTab = TABS.find(t => t.id === activeTab) || TABS[0];
   const TabComponent = currentTab.component;
@@ -1142,9 +1145,9 @@ export default function Admin() {
   return (
     <>
       <PageHeader
-        crumbs={['Ruptur OS', 'Sistema', 'Configurações']}
-        title="Admin"
-        sub="Workspace, equipe, integrações e segurança"
+        crumbs={['Ruptur OS', tr('app.admin.crumbSystem'), tr('app.admin.crumbSettings')]}
+        title={tr('app.admin.title')}
+        sub={tr('app.admin.sub')}
       />
 
       {/* Tab bar */}
@@ -1165,7 +1168,7 @@ export default function Admin() {
               transition: 'color .15s',
             }}
           >
-            {t.label}
+            {tr('app.admin.tabs.' + t.id)}
             {t.badge != null && (
               <span style={{
                 fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, padding: '0 5px',

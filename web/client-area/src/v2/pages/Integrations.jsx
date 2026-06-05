@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { Button, PageHeader } from '../../ds/index.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { useT } from '../../i18n/index.jsx';
 
 // ---------------------------------------------------------------------------
 // CSS inline — padrão do projeto (escopo via classes únicas)
@@ -259,6 +260,7 @@ function WebhookSection() {
 // ---------------------------------------------------------------------------
 export default function Integrations() {
   const auth = useAuth?.();
+  const t = useT();
   const token = auth?.user?.token || window.__ruptur?.auth?.token || null;
 
   return (
@@ -266,20 +268,20 @@ export default function Integrations() {
       <style>{STYLES}</style>
 
       <PageHeader
-        title="Integrações"
-        sub="Configure os provedores de WhatsApp e webhooks do sistema"
+        title={t('app.integrations.title')}
+        sub={t('app.integrations.sub')}
       />
 
       <div className="int-grid">
         {/* ── UAZAPI ── */}
         <div>
-          <p className="int-section-title">UAZAPI — Provedor WhatsApp</p>
+          <p className="int-section-title">{t('app.integrations.uazapiSection')}</p>
           <div className="int-card">
             <div className="int-card-header">
               <div className="int-card-header-icon">🔌</div>
               <div className="int-card-header-info">
                 <div className="int-card-header-name">UAZAPI</div>
-                <div className="int-card-header-sub">Instâncias WhatsApp via API · free tier e servidor dedicado</div>
+                <div className="int-card-header-sub">{t('app.integrations.uazapiSub')}</div>
               </div>
             </div>
             <div className="int-card-body">
@@ -292,13 +294,13 @@ export default function Integrations() {
 
         {/* ── Webhook Global ── */}
         <div>
-          <p className="int-section-title">Webhook Global</p>
+          <p className="int-section-title">{t('app.integrations.webhookSection')}</p>
           <div className="int-card">
             <div className="int-card-header">
               <div className="int-card-header-icon" style={{ background: 'linear-gradient(135deg, #6366F1, #A78BFA)' }}>⚡</div>
               <div className="int-card-header-info">
-                <div className="int-card-header-name">Webhook de entrada</div>
-                <div className="int-card-header-sub">Receba eventos de todas as instâncias num único endpoint</div>
+                <div className="int-card-header-name">{t('app.integrations.webhookName')}</div>
+                <div className="int-card-header-sub">{t('app.integrations.webhookSub')}</div>
               </div>
             </div>
             <div className="int-card-body">
