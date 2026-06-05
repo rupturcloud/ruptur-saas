@@ -15,6 +15,7 @@ import {
 import { useToast } from '../../ds/toast.js';
 import { providerApi } from '../../api/admin.api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { supabase } from '../../services/supabase.js';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -1632,6 +1633,87 @@ function BillingTab() {
   );
 }
 
+// ─── Aba: Conta (perfil do usuário logado) ────────────────────────────────────
+
+function ContaTab() {
+  const { user, signOut } = useAuth();
+
+  const [fullName, setFullName] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [newPass2, setNewPass2] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPass, setSavingPass] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    setFullName(user?.user_metadata?.full_name || user?.user_metadata?.tenant_name || '');
+  }, [user?.id]);
+
+  const saveProfile = async () => {
+    setSavingProfile(true); setMsg(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { full_name: fullName.trim() } });
+      if (error) throw error;
+      setMsg({ type: 'ok', text: 'Perfil atualizado.' });
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setSavingProfile(false); }
+  };
+
+  const savePassword = async () => {
+    if (newPass.length < 6) { setMsg({ type: 'err', text: 'A senha precisa de ao menos 6 caracteres' }); return; }
+    if (newPass !== newPass2) { setMsg({ type: 'err', text: 'As senhas não conferem' }); return; }
+    setSavingPass(true); setMsg(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPass });
+      if (error) throw error;
+      setMsg({ type: 'ok', text: 'Senha alterada com sucesso.' });
+      setNewPass(''); setNewPass2('');
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setSavingPass(false); }
+  };
+
+  if (!user) return <div style={{ padding: 24, color: 'var(--ink-400)' }}>Não autenticado.</div>;
+
+  return (
+    <div style={{ maxWidth: 520 }}>
+      <div style={{ display: 'flex', gap: 20, marginBottom: 20, padding: '12px 14px', borderRadius: 10, background: 'var(--ink-50)', border: '1px solid var(--ink-150)', fontSize: 12, color: 'var(--ink-500)', flexWrap: 'wrap' }}>
+        <span>E-mail: <strong style={{ color: 'var(--ink-800)' }}>{user.email}</strong></span>
+        <span>ID: <strong style={{ color: 'var(--ink-800)' }}>{user.id?.slice(0, 8)}…</strong></span>
+        <span>Criado: <strong style={{ color: 'var(--ink-800)' }}>{user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : '—'}</strong></span>
+        <span>Último acesso: <strong style={{ color: 'var(--ink-800)' }}>{user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString('pt-BR') : '—'}</strong></span>
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 10 }}>Perfil</div>
+        <div style={{ marginBottom: 12 }}><WsField label="Nome de exibição"><input value={fullName} onChange={e => setFullName(e.target.value)} style={wsInput} /></WsField></div>
+        <div style={{ marginBottom: 12 }}><WsField label="E-mail (alterar requer suporte)"><input value={user.email} disabled style={{ ...wsInput, background: 'var(--ink-50)', color: 'var(--ink-500)' }} /></WsField></div>
+        <button onClick={saveProfile} disabled={savingProfile} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: 'var(--brand-500)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: savingProfile ? 0.6 : 1 }}>
+          {savingProfile ? 'Salvando...' : 'Salvar perfil'}
+        </button>
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 10 }}>Alterar senha</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <WsField label="Nova senha"><input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} autoComplete="new-password" style={wsInput} /></WsField>
+          <WsField label="Confirmar senha"><input type="password" value={newPass2} onChange={e => setNewPass2(e.target.value)} autoComplete="new-password" style={wsInput} /></WsField>
+        </div>
+        <button onClick={savePassword} disabled={savingPass || !newPass} style={{ marginTop: 12, padding: '9px 18px', borderRadius: 9, border: 'none', background: 'var(--brand-500)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: (savingPass || !newPass) ? 'not-allowed' : 'pointer', opacity: (savingPass || !newPass) ? 0.6 : 1 }}>
+          {savingPass ? 'Alterando...' : 'Alterar senha'}
+        </button>
+      </div>
+
+      {msg && <div style={{ marginBottom: 18, padding: '10px 14px', borderRadius: 8, fontSize: 13, background: msg.type === 'ok' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)', color: msg.type === 'ok' ? '#16a34a' : '#dc2626', border: `1px solid ${msg.type === 'ok' ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.25)'}` }}>{msg.text}</div>}
+
+      <div style={{ paddingTop: 16, borderTop: '1px solid var(--ink-150)' }}>
+        <button onClick={signOut} style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid var(--ink-200)', background: '#fff', color: 'var(--ink-700)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+          Sair da conta
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Aba genérica: Placeholder ────────────────────────────────────────────────
 
 function ComingSoonTab({ label }) {
@@ -1649,7 +1731,7 @@ function ComingSoonTab({ label }) {
 const TABS = [
   { id: 'users',       label: 'Usuários e papéis', component: UsersTab },
   { id: 'workspace',   label: 'Workspace',          component: WorkspaceTab },
-  { id: 'conta',       label: 'Conta',              component: () => <ComingSoonTab label="Conta" /> },
+  { id: 'conta',       label: 'Conta',              component: ContaTab },
   { id: 'billing',     label: 'Cobrança',           component: BillingTab },
   { id: 'notifs',      label: 'Notificações',       component: () => <ComingSoonTab label="Notificações" /> },
   { id: 'lgpd',        label: 'Privacidade & LGPD', component: () => <ComingSoonTab label="Privacidade & LGPD" /> },
