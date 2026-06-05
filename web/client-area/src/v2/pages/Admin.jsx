@@ -64,6 +64,10 @@ function UsersTab() {
   const [actionState, setActionState] = useState({});
   const [roleOpen, setRoleOpen] = useState(null);
   const [loadError, setLoadError] = useState(null);   // erro do fetch de membros (diagnóstico)
+  const [inviteOpen, setInviteOpen] = useState(false);   // painel de convite (CREATE)
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('member');
+  const [inviteState, setInviteState] = useState(null);  // null | 'saving' | 'ok' | 'err:...'
 
   // Selecionar tenant inicial a partir do AuthContext (sem chamar API)
   useEffect(() => {
@@ -106,10 +110,10 @@ function UsersTab() {
 
   useEffect(() => { loadMembers(); }, [loadMembers]);
 
-  const doAction = async (userId, url, body = null) => {
+  const doAction = async (userId, url, body = null, method = 'POST') => {
     setActionState(s => ({ ...s, [userId]: 'saving' }));
     try {
-      const opts = { method: 'POST', headers: h };
+      const opts = { method, headers: h };
       if (body) opts.body = JSON.stringify(body);
       const res = await fetch(url, opts);
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
@@ -127,6 +131,33 @@ function UsersTab() {
   };
   const confirmEmail  = (userId) => doAction(userId, `/api/admin/platform/users/${userId}/confirm-email`);
   const resetPassword = (userId) => doAction(userId, `/api/admin/platform/users/${userId}/reset-password`);
+
+  // DELETE — remover membro do tenant (endpoint platform; a conta no Auth permanece)
+  const removeMember = (userId, email) => {
+    setRoleOpen(null);
+    if (typeof window !== 'undefined' &&
+        !window.confirm(`Remover ${email} deste tenant?\n\nO usuário perde o acesso a este workspace (a conta de login permanece).`)) return;
+    doAction(userId, `/api/admin/platform/tenants/${selectedId}/members/${userId}`, null, 'DELETE');
+  };
+
+  // CREATE — convidar/adicionar membro (cria no Auth se não existir + vincula ao tenant)
+  const addMember = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !email.includes('@')) { setInviteState('err:Informe um e-mail válido'); return; }
+    if (!selectedId) { setInviteState('err:Nenhum tenant selecionado'); return; }
+    setInviteState('saving');
+    try {
+      const res = await fetch(`/api/admin/platform/tenants/${selectedId}/members`, {
+        method: 'POST', headers: h, body: JSON.stringify({ email, role: inviteRole }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
+      setInviteState('ok');
+      setInviteEmail('');
+      setTimeout(() => { setInviteState(null); setInviteOpen(false); loadMembers(); }, 1000);
+    } catch (e) {
+      setInviteState('err:' + e.message);
+    }
+  };
 
   // Nome do tenant exibido
   const displayTenant = allTenants.find(t => t.id === selectedId) || tenant;
@@ -176,7 +207,58 @@ function UsersTab() {
         <div style={{ fontWeight: 600, color: 'var(--ink-900)', fontSize: 15 }}>
           Equipe · {loading ? '...' : members.length} membro{members.length !== 1 ? 's' : ''}
         </div>
+        <button
+          onClick={() => { setInviteOpen(o => !o); setInviteState(null); }}
+          disabled={!selectedId}
+          style={{
+            padding: '7px 14px', borderRadius: 8, border: 'none', cursor: selectedId ? 'pointer' : 'not-allowed',
+            background: 'var(--brand-500)', color: '#fff', fontSize: 13, fontWeight: 600, opacity: selectedId ? 1 : 0.5,
+          }}
+        >
+          {inviteOpen ? '✕ Cancelar' : '+ Adicionar membro'}
+        </button>
       </div>
+
+      {/* Painel de convite (CREATE) */}
+      {inviteOpen && (
+        <div style={{
+          display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end',
+          padding: 14, marginBottom: 14, borderRadius: 10,
+          background: 'var(--ink-50)', border: '1px solid var(--ink-150)',
+        }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>E-mail do novo membro</label>
+            <input
+              type="email" value={inviteEmail}
+              onChange={e => { setInviteEmail(e.target.value); setInviteState(null); }}
+              onKeyDown={e => e.key === 'Enter' && addMember()}
+              placeholder="pessoa@empresa.com" autoFocus
+              style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--ink-200)', fontSize: 13 }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 5 }}>Papel</label>
+            <select
+              value={inviteRole} onChange={e => setInviteRole(e.target.value)}
+              style={{ padding: '9px 11px', borderRadius: 8, border: '1px solid var(--ink-200)', fontSize: 13, background: '#fff' }}
+            >
+              {ROLE_OPTS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <button
+            onClick={addMember} disabled={inviteState === 'saving'}
+            style={{
+              padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+              background: 'var(--brand-500)', color: '#fff', fontSize: 13, fontWeight: 600,
+              opacity: inviteState === 'saving' ? 0.6 : 1,
+            }}
+          >
+            {inviteState === 'saving' ? 'Adicionando...' : 'Adicionar'}
+          </button>
+          {inviteState === 'ok' && <span style={{ color: '#22c55e', fontSize: 12, fontWeight: 600 }}>✓ Adicionado</span>}
+          {inviteState?.startsWith('err:') && <span style={{ color: '#ef4444', fontSize: 12 }}>{inviteState.slice(4)}</span>}
+        </div>
+      )}
 
       {/* Selector de tenant (só super admin vê todos) */}
       {isPlatformAdmin && allTenants.length > 1 && (
@@ -321,6 +403,16 @@ function UsersTab() {
                           }}
                         >
                           Reset senha
+                        </button>
+                        <button
+                          onClick={() => removeMember(m.user_id, m.email)}
+                          style={{
+                            padding: '4px 10px', borderRadius: 6, border: '1px solid #fecaca',
+                            background: 'rgba(239,68,68,.06)', color: '#dc2626', fontSize: 11,
+                            fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          Remover
                         </button>
                       </div>
                     )}
