@@ -23,6 +23,7 @@ import UaZAPIClient from '../../integrations/uazapi/client.js';
 import { inboxManager } from '../inbox/index.js';
 import { getWalletManager } from '../wallet/index.js';
 import { decryptSecret } from '../providers/uazapi-account.service.js';
+import { createUazapiAdapter, buildButtonChoices } from '../provider-adapter/uazapi-adapter.js';
 
 // ---------------------------------------------------------------------------
 //  Mapeamento de status domínio ↔ banco
@@ -79,6 +80,7 @@ export class CampaignManager {
     const TICK_MS = 60 * 1000;
     this._schedulerTimer = setInterval(() => {
       this.processScheduledCampaigns().catch((e) => console.error('[Campaigns] scheduler tick falhou:', e && e.message));
+      this.reconcileNativeCampaigns().catch((e) => console.error('[Campaigns] reconcile tick falhou:', e && e.message));
     }, TICK_MS);
     if (this._schedulerTimer.unref) this._schedulerTimer.unref();
     console.log('[Campaigns] scheduler de campanhas agendadas ativo (tick 60s)');
@@ -100,6 +102,27 @@ export class CampaignManager {
         await this.launchCampaign(c.id);
       } catch (e) {
         console.error('[Campaigns] falha ao disparar agendada', c.id, e && e.message);
+      }
+    }
+  }
+
+  /**
+   * Reconcilia campanhas nativas em envio: para cada campanha 'sending' com
+   * senderFolderId, consulta o status no provedor e atualiza métricas/créditos.
+   */
+  async reconcileNativeCampaigns() {
+    const { data: sending, error } = await this.supabase
+      .from('campaigns')
+      .select('id, metadata')
+      .eq('status', 'sending')
+      .limit(20);
+    if (error) { console.error('[Campaigns] reconcileNativeCampaigns:', error.message); return; }
+    for (const c of (sending || [])) {
+      if (!c.metadata?.senderFolderId) continue; // só campanhas nativas
+      try {
+        await this.syncNativeCampaign(c.id);
+      } catch (e) {
+        console.error('[Campaigns] falha ao reconciliar', c.id, e && e.message);
       }
     }
   }
@@ -129,6 +152,8 @@ export class CampaignManager {
         media: row.media_url ? [row.media_url] : [],
         mediaType: row.media_type || 'text',
         variables: meta.variables || [],
+        buttons: meta.buttons || [],
+        footerText: meta.footerText || '',
       },
       recipients: meta.recipients || { type: 'custom', customNumbers: [] },
       sender: meta.sender || { type: 'pool', instanceIds: [], maxMessagesPerInstance: 50 },
@@ -141,6 +166,7 @@ export class CampaignManager {
         replyCount: meta.replyCount || 0,
       },
       instanceId: row.instance_id || null,
+      senderFolderId: meta.senderFolderId || null,
       scheduledAt: row.scheduled_at,
       launchedAt: row.started_at,
       completedAt: row.completed_at,
@@ -180,6 +206,9 @@ export class CampaignManager {
         sender: campaign.sender,
         recipients: campaign.recipients,
         variables: campaign.content?.variables || [],
+        buttons: campaign.content?.buttons || [],
+        footerText: campaign.content?.footerText || '',
+        senderFolderId: campaign.senderFolderId || null,
         createdBy: campaign.createdBy,
         replyCount: campaign.metrics?.replyCount || 0,
       },
@@ -202,12 +231,30 @@ export class CampaignManager {
         scheduleType: campaignData.scheduleType || 'immediate',
         scheduledAt: campaignData.scheduledAt || null,
         timezone: campaignData.timezone || 'America/Sao_Paulo',
+        // Modo de disparo: 'native' usa /sender/advanced da UAZAPI (fila/anti-ban
+        // no provedor) + reconciliação de créditos; 'legacy' usa o loop interno.
+        // Default 'legacy' para preservar campanhas existentes; a UI nova envia 'native'.
+        dispatchMode: campaignData.dispatchMode === 'native' ? 'native' : 'legacy',
+        delayMin: campaignData.delayMin ?? 3,
+        delayMax: campaignData.delayMax ?? 8,
       },
       content: {
         message: campaignData.message,
         media: campaignData.media || [],
         mediaType: campaignData.mediaType || 'text',
         variables: campaignData.variables || [],
+        // Botões interativos (type 'button' do /send/menu e /sender/advanced).
+        // Formato: [{ id?, text, url? }] — `url` opcional transforma o botão em
+        // botão de URL (choices "texto|url"). Sem `url`, é botão de resposta.
+        buttons: (Array.isArray(campaignData.buttons) ? campaignData.buttons : [])
+          .map((b, i) => (typeof b === 'string'
+            ? { id: `btn_${i}`, text: b }
+            : {
+              id: b.id || `btn_${i}`,
+              text: b.text,
+              ...(b.url && String(b.url).trim() ? { url: String(b.url).trim() } : {}),
+            })),
+        footerText: campaignData.footerText || '',
       },
       recipients: {
         type: campaignData.recipientType || 'custom',
@@ -326,6 +373,11 @@ export class CampaignManager {
       throw new Error(`Campaign ${campaignId} não está em status lançável (atual: ${campaign.status})`);
     }
 
+    // Modo híbrido: dispara via /sender/advanced da UAZAPI (fila no provedor).
+    if (campaign.settings?.dispatchMode === 'native') {
+      return this.launchCampaignNative(campaign);
+    }
+
     const recipients = await this.getRecipients(campaign);
     if (recipients.length === 0) {
       throw new Error('Nenhum destinatário encontrado para a campanha');
@@ -358,6 +410,180 @@ export class CampaignManager {
 
     console.log(`[Campaigns] Campanha lançada: ${campaignId} com ${recipients.length} destinatários`);
     return true;
+  }
+
+  // =========================================================================
+  //  Disparo NATIVO (híbrido) — /sender/advanced + reconciliação de créditos
+  // =========================================================================
+  /**
+   * Cria adapter UAZAPI para uma instância de envio resolvida (getSenderInstances).
+   */
+  _adapterForSender(senderInstance) {
+    return createUazapiAdapter({
+      serverUrl: senderInstance.serverUrl,
+      adminToken: senderInstance.adminToken,
+      instanceToken: senderInstance.token,
+    });
+  }
+
+  /**
+   * Monta o array `messages` do /sender/advanced a partir dos destinatários.
+   * Cada destinatário vira uma mensagem personalizada (text | media | button).
+   */
+  _buildSenderMessages(campaign, recipients) {
+    const content = campaign.content || {};
+    const variables = content.variables || [];
+    const buttons = (content.buttons || []).map((b, i) =>
+      (typeof b === 'string'
+        ? { id: `btn_${i}`, text: b }
+        : { id: b.id || `btn_${i}`, text: b.text, ...(b.url ? { url: b.url } : {}) }));
+    const mediaType = content.mediaType && content.mediaType !== 'text' ? content.mediaType : null;
+    const mediaUrl = content.media?.[0] || null;
+
+    return recipients.map((r) => {
+      const text = this.personalizeMessage(content.message, r, variables);
+      const base = { number: String(r.phone).replace(/\D/g, '') };
+
+      if (buttons.length > 0) {
+        return {
+          ...base,
+          type: 'button',
+          text,
+          choices: buildButtonChoices(buttons),
+          footerText: content.footerText || '',
+          ...(mediaUrl ? { file: mediaUrl } : {}),
+        };
+      }
+      if (mediaType) {
+        return { ...base, type: mediaType, text, file: mediaUrl };
+      }
+      return { ...base, type: 'text', text };
+    });
+  }
+
+  /**
+   * Lança a campanha via fila nativa da UAZAPI (/sender/advanced).
+   * Crédito: debita o total estimado UPFRONT (reserva); a reconciliação
+   * (estorno de falhas) acontece em syncNativeCampaign via /sender/listmessages.
+   */
+  async launchCampaignNative(campaign) {
+    const recipients = await this.getRecipients(campaign);
+    if (recipients.length === 0) throw new Error('Nenhum destinatário encontrado para a campanha');
+
+    const senders = await this.getSenderInstances(campaign);
+    if (!senders.length) throw new Error('Nenhuma instância conectada para envio');
+    const sender = senders[0];
+
+    // Reserva de créditos: 1 por destinatário, debitado antes do disparo.
+    const walletManager = getWalletManager();
+    const total = recipients.length;
+    const hasCredits = await walletManager.hasEnoughCredits(campaign.tenantId, total);
+    if (!hasCredits) throw new Error(`Créditos insuficientes: a campanha exige ${total} créditos`);
+    await walletManager.deductCredit(campaign.tenantId, total, {
+      campaignId: campaign.id,
+      description: `Reserva de campanha nativa (${total} envios)`,
+    });
+
+    // Agendamento: scheduled_for em minutos a partir de agora (0 = imediato).
+    let scheduledFor = 0;
+    if (campaign.settings?.scheduleType === 'scheduled' && campaign.settings?.scheduledAt) {
+      const diffMs = new Date(campaign.settings.scheduledAt).getTime() - Date.now();
+      scheduledFor = Math.max(0, Math.round(diffMs / 60000));
+    }
+
+    const payload = {
+      delayMin: campaign.settings?.delayMin ?? 3,
+      delayMax: campaign.settings?.delayMax ?? 8,
+      info: campaign.name || 'Campanha Ruptur',
+      scheduled_for: scheduledFor,
+      messages: this._buildSenderMessages(campaign, recipients),
+    };
+
+    let folderId = null;
+    try {
+      const adapter = this._adapterForSender(sender);
+      const result = await adapter.senderAdvanced(sender.token, payload);
+      folderId = result?.folder_id || result?.folderId || result?.id || null;
+    } catch (e) {
+      // Falha no disparo: estorna a reserva integralmente.
+      await walletManager.addCredits(campaign.tenantId, total, {
+        source: 'refund',
+        description: `Estorno: falha ao disparar campanha ${campaign.id}`,
+      }).catch(() => {});
+      throw new Error(`Falha ao disparar campanha nativa: ${e.message}`);
+    }
+
+    const launchedAt = new Date().toISOString();
+    const meta = { ...(campaign.metadata || {}) };
+    // Persistir folder_id no metadata (reconciliação posterior usa esse id).
+    const { data: row } = await this.supabase.from('campaigns').select('metadata').eq('id', campaign.id).maybeSingle();
+    const newMeta = { ...(row?.metadata || {}), senderFolderId: folderId };
+    await this.supabase
+      .from('campaigns')
+      .update({ status: 'sending', started_at: launchedAt, total_recipients: total, metadata: newMeta })
+      .eq('id', campaign.id);
+
+    console.log(`[Campaigns] Campanha nativa lançada: ${campaign.id} folder=${folderId} (${total} msgs)`);
+    return true;
+  }
+
+  /**
+   * Reconciliação de campanha nativa: consulta /sender/listmessages pelo folder_id,
+   * atualiza métricas (sent/delivered/read/failed) e ESTORNA créditos das falhas.
+   * Idempotente o suficiente para rodar em polling (scheduler).
+   */
+  async syncNativeCampaign(campaignId) {
+    const campaign = await this.getCampaign(campaignId);
+    if (!campaign || !campaign.senderFolderId) return null;
+    if (campaign.status !== 'sending') return null;
+
+    const senders = await this.getSenderInstances(campaign);
+    if (!senders.length) return null;
+    const adapter = this._adapterForSender(senders[0]);
+
+    let messages = [];
+    try {
+      const res = await adapter.senderListMessages(senders[0].token, { folder_id: campaign.senderFolderId });
+      messages = res?.messages || res || [];
+    } catch (e) {
+      console.error('[Campaigns] syncNativeCampaign listmessages falhou:', e.message);
+      return null;
+    }
+
+    const counts = { sent: 0, delivered: 0, read: 0, failed: 0, pending: 0 };
+    for (const m of messages) {
+      const st = String(m.status || m.messageStatus || '').toLowerCase();
+      if (['delivered', 'received'].includes(st)) counts.delivered++;
+      else if (['read', 'played'].includes(st)) counts.read++;
+      else if (['error', 'failed'].includes(st)) counts.failed++;
+      else if (['sent', 'server_ack', 'done'].includes(st)) counts.sent++;
+      else counts.pending++;
+    }
+
+    // Reconciliação de crédito: estorna as falhas ainda não estornadas.
+    const meta = campaign.metadata || {};
+    const alreadyRefunded = meta.refundedFailures || 0;
+    const newFailures = Math.max(0, counts.failed - alreadyRefunded);
+    if (newFailures > 0) {
+      await getWalletManager().addCredits(campaign.tenantId, newFailures, {
+        source: 'refund',
+        description: `Estorno de ${newFailures} falha(s) — campanha ${campaign.id}`,
+      }).catch((e) => console.error('[Campaigns] estorno falhou:', e.message));
+    }
+
+    const allDone = counts.pending === 0 && messages.length > 0;
+    const { data: row } = await this.supabase.from('campaigns').select('metadata').eq('id', campaignId).maybeSingle();
+    const newMeta = { ...(row?.metadata || {}), refundedFailures: alreadyRefunded + newFailures };
+    await this.supabase.from('campaigns').update({
+      sent_count: counts.sent + counts.delivered + counts.read,
+      delivered_count: counts.delivered + counts.read,
+      read_count: counts.read,
+      failed_count: counts.failed,
+      metadata: newMeta,
+      ...(allDone ? { status: 'completed', completed_at: new Date().toISOString() } : {}),
+    }).eq('id', campaignId);
+
+    return counts;
   }
 
   async getRecipients(campaign) {
@@ -738,6 +964,7 @@ export class CampaignManager {
   }
 
   async pauseCampaign(campaignId) {
+    await this._nativeSenderEdit(campaignId, 'stop'); // pausa a fila no provedor, se nativa
     const ok = await this.updateCampaignStatus(campaignId, 'paused');
     const live = this.activeCampaigns.get(campaignId);
     if (live) live.status = 'paused';
@@ -745,10 +972,25 @@ export class CampaignManager {
   }
 
   async stopCampaign(campaignId) {
+    await this._nativeSenderEdit(campaignId, 'delete'); // remove mensagens não enviadas, se nativa
     const ok = await this.updateCampaignStatus(campaignId, 'stopped');
     this.activeCampaigns.delete(campaignId);
     this.sendingQueue = this.sendingQueue.filter((item) => item.campaignId !== campaignId);
     return ok;
+  }
+
+  /** Controla a campanha nativa no provedor via /sender/edit (no-op se não for nativa). */
+  async _nativeSenderEdit(campaignId, action) {
+    try {
+      const campaign = await this.getCampaign(campaignId);
+      if (!campaign?.senderFolderId) return;
+      const senders = await this.getSenderInstances(campaign);
+      if (!senders.length) return;
+      const adapter = this._adapterForSender(senders[0]);
+      await adapter.senderEdit(senders[0].token, { folder_id: campaign.senderFolderId, action });
+    } catch (e) {
+      console.error(`[Campaigns] _nativeSenderEdit(${action}) falhou:`, e.message);
+    }
   }
 
   async getCampaignMessages(campaignId, options = {}) {

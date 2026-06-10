@@ -31,14 +31,23 @@ const AquecimentoV2  = lazy(() => import('./v2/pages/Aquecimento.jsx'));
 const InboxV2        = lazy(() => import('./v2/pages/Inbox.jsx'));
 const IntegrationsV2 = lazy(() => import('./v2/pages/Integrations.jsx'));
 const BillingV2      = lazy(() => import('./v2/pages/Billing.jsx'));
+const CrmV2          = lazy(() => import('./v2/pages/Crm.jsx'));
+const CampaignsV2    = lazy(() => import('./v2/pages/Campaigns.jsx'));
 const PlaceholderV2  = lazy(() => import('./v2/pages/Placeholder.jsx'));
 
 // Admin plataforma (super admin)
 const AdminDashboard      = lazy(() => import('./pages/AdminDashboard.jsx'));
 const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard.jsx'));
 
+// BETA /beta-bubble — superfície de disparo ligada ao backend nativo (Bubble como mapa)
+const BetaShell        = lazy(() => import('./beta/layout/BetaShell.jsx'));
+const BetaCampanhas    = lazy(() => import('./beta/pages/Campanhas.jsx'));
+const BetaDisparador   = lazy(() => import('./beta/pages/Disparador.jsx'));
+const BetaLeads        = lazy(() => import('./beta/pages/Leads.jsx'));
+const BetaMonitor      = lazy(() => import('./beta/pages/Monitor.jsx'));
+
 const V0_STUBS = [
-  'personas','pricing','leads','pipeline','accounts','campaigns',
+  'personas','pricing','leads','accounts',
   'flows','playbooks','insights','indicacoes','sprints',
   'founder','remarketing','outreach','grupos','canais',
   'rede-coletiva','business','growth',
@@ -96,6 +105,8 @@ function App() {
                 <Route path="admin"       element={<AdminV2 />} />
                 <Route path="aquecimento" element={<AquecimentoV2 />} />
                 <Route path="inbox"       element={<InboxV2 />} />
+                <Route path="pipeline"    element={<CrmV2 />} />
+                <Route path="campaigns"   element={<CampaignsV2 />} />
                 <Route path="integracoes" element={<IntegrationsV2 />} />
                 <Route path="billing"     element={<BillingV2 />} />
                 {/* Administração da plataforma — dentro do AppShell laranja, só platform admin */}
@@ -107,6 +118,18 @@ function App() {
                   <Route key={id} path={id} element={<PlaceholderV2 name={id} />} />
                 ))}
                 <Route path="*" element={<Navigate to="/v0/dashboard" replace />} />
+              </Route>
+            </Route>
+
+            {/* BETA /beta-bubble — disparo WhatsApp (backend nativo); usa auth/tenants existentes */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/beta-bubble" element={<BetaShell />}>
+                <Route index element={<Navigate to="/beta-bubble/campanhas" replace />} />
+                <Route path="campanhas"  element={<BetaCampanhas />} />
+                <Route path="disparador" element={<BetaDisparador />} />
+                <Route path="leads"      element={<BetaLeads />} />
+                <Route path="monitor"    element={<BetaMonitor />} />
+                <Route path="*" element={<Navigate to="/beta-bubble/campanhas" replace />} />
               </Route>
             </Route>
 

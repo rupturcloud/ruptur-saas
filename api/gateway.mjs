@@ -38,6 +38,7 @@ import * as instanceRoutes from './routes-instances.mjs';
 import * as bubbleRoutes from './routes-bubble.mjs';
 import { handleMessageRoutes } from './routes-messages.mjs';
 import * as inboxRoutes from './routes-inbox.mjs';
+import * as crmRoutes from './routes-crm.mjs';
 import { handleUAZAPIWebhookNative } from './routes-webhook-uazapi.mjs';
 import { assertTenantActive, invalidateTenantStatusCache } from '../middleware/tenant-active.mjs';
 import { rateLimitTenant, getRateLimitHeaders, isExemptRoute } from './modules/rate-limiter/tenant-rate-limiter.js';
@@ -2418,7 +2419,7 @@ async function handler(req, res) {
   }
 
   // --- Proxy: Dashboard Stats, Campaigns, Wallet, Inbox → Warmup Manager ---
-  if (pathname.startsWith('/api/') && !pathname.startsWith('/api/v1/') && !pathname.startsWith('/api/billing') && !pathname.startsWith('/api/tenants') && !pathname.startsWith('/api/webhooks') && !pathname.startsWith('/api/referrals') && !pathname.startsWith('/api/admin') && !pathname.startsWith('/api/notifications') && !pathname.startsWith('/api/users') && !pathname.startsWith('/api/bubble') && !pathname.startsWith('/api/instances') && !pathname.startsWith('/api/messages') && !pathname.startsWith('/api/analytics') && !pathname.startsWith('/api/onboarding')) {
+  if (pathname.startsWith('/api/') && !pathname.startsWith('/api/v1/') && !pathname.startsWith('/api/billing') && !pathname.startsWith('/api/tenants') && !pathname.startsWith('/api/webhooks') && !pathname.startsWith('/api/referrals') && !pathname.startsWith('/api/admin') && !pathname.startsWith('/api/notifications') && !pathname.startsWith('/api/users') && !pathname.startsWith('/api/bubble') && !pathname.startsWith('/api/instances') && !pathname.startsWith('/api/messages') && !pathname.startsWith('/api/analytics') && !pathname.startsWith('/api/onboarding') && !pathname.startsWith('/api/inbox') && !pathname.startsWith('/api/crm')) {
     // FIX (auditoria): rotas sensíveis proxypadas ao warmup-core (campanhas, wallet,
     // warmup, dashboard) NÃO exigiam auth — qualquer um disparava campanha/spam em
     // nome de qualquer tenant. Agora exige JWT válido e injeta o tenant resolvido
@@ -2502,9 +2503,45 @@ async function handler(req, res) {
     if (pathname === '/api/inbox/markread'  && req.method === 'POST') return inboxRoutes.handleMarkRead(req, res, json, supabase);
     if (pathname === '/api/inbox/react'     && req.method === 'POST') return inboxRoutes.handleReact(req, res, json, supabase);
     if (pathname === '/api/inbox/lead'      && req.method === 'POST') return inboxRoutes.handleEditLead(req, res, json, supabase);
+    if (pathname === '/api/inbox/message/delete'   && req.method === 'POST') return inboxRoutes.handleDeleteMessage(req, res, json, supabase);
+    if (pathname === '/api/inbox/message/edit'     && req.method === 'POST') return inboxRoutes.handleEditMessage(req, res, json, supabase);
+    if (pathname === '/api/inbox/message/pin'      && req.method === 'POST') return inboxRoutes.handlePinMessage(req, res, json, supabase);
+    if (pathname === '/api/inbox/message/download' && req.method === 'POST') return inboxRoutes.handleDownloadMessage(req, res, json, supabase);
     if (inboxLabelsMatch && req.method === 'GET') { req.params = { instanceKey: inboxLabelsMatch[1] }; return inboxRoutes.handleGetLabels(req, res, json, supabase); }
     if (inboxGroupsMatch && req.method === 'GET') { req.params = { instanceKey: inboxGroupsMatch[1] }; return inboxRoutes.handleGetGroups(req, res, json, supabase); }
     return json(res, 404, { error: 'Rota inbox não encontrada' }, req);
+  }
+
+  // ================================================================
+  //  CRM / Pipeline / Kanban — colunas no Supabase + cards na UAZAPI
+  //  Mesma resolução de auth + tenant do Inbox.
+  // ================================================================
+  if (pathname.startsWith('/api/crm/')) {
+    const user = await extractUser(req);
+    if (!user) return json(res, 401, { error: 'Não autenticado' }, req);
+    if (!supabase) return json(res, 503, { error: 'Supabase não configurado' }, req);
+    const requestedTid = req.headers['x-tenant-id'] || url.searchParams.get('tenantId') || url.searchParams.get('tenant_id');
+    let tenantId;
+    if (requestedTid) {
+      tenantId = await validateTenantAccess(user, requestedTid, supabase);
+      if (!tenantId) return json(res, 403, { error: 'Acesso negado ao tenant' }, req);
+    } else {
+      tenantId = await getDefaultTenantForUser(user, supabase);
+    }
+    if (!tenantId) return json(res, 403, { error: 'Tenant não identificado' }, req);
+    req.user = user;
+    req.tenantId = tenantId;
+    if (['POST', 'PUT', 'PATCH'].includes(req.method)) req.body = await parseBody(req);
+
+    if (pathname === '/api/crm/pipeline'      && req.method === 'GET')  return crmRoutes.handleGetPipeline(req, res, json, supabase);
+    if (pathname === '/api/crm/card/move'     && req.method === 'POST') return crmRoutes.handleMoveCard(req, res, json, supabase);
+    if (pathname === '/api/crm/card/update'   && req.method === 'POST') return crmRoutes.handleUpdateCard(req, res, json, supabase);
+    if (pathname === '/api/crm/stages'        && req.method === 'GET')  return crmRoutes.handleListStages(req, res, json, supabase);
+    if (pathname === '/api/crm/stages'        && req.method === 'POST') return crmRoutes.handleCreateStage(req, res, json, supabase);
+    if (pathname === '/api/crm/stages/update' && req.method === 'POST') return crmRoutes.handleUpdateStage(req, res, json, supabase);
+    if (pathname === '/api/crm/stages/delete' && req.method === 'POST') return crmRoutes.handleDeleteStage(req, res, json, supabase);
+    if (pathname === '/api/crm/stages/reorder'&& req.method === 'POST') return crmRoutes.handleReorderStages(req, res, json, supabase);
+    return json(res, 404, { error: 'Rota CRM não encontrada' }, req);
   }
 
   // ================================================================
@@ -2605,24 +2642,22 @@ async function handler(req, res) {
     req.tenantId = tenantId;
     if (body) req.body = body;
 
-    // Credenciais UAZAPI: busca o provider_account do tenant via uazapiAccountService
-    let uazapiCredentials = null;
+    // Credenciais UAZAPI: busca o provider_account do tenant via uazapiAccountService.
+    // Env vars são sempre o fallback final — se o service retornar adminToken undefined
+    // (credenciais encriptadas sem SECRETS_MASTER_KEY), usa as vars de ambiente.
+    const envServerUrl  = process.env.UAZAPI_BASE_URL || 'https://ruptur.uazapi.com';
+    const envAdminToken = process.env.UAZAPI_TOKEN || process.env.UAZAPI_ADMIN_TOKEN;
+    let uazapiCredentials = { serverUrl: envServerUrl, adminToken: envAdminToken };
     if (uazapiAccountService) {
       try {
         const accounts = await uazapiAccountService.listAccounts();
         if (accounts?.length) {
           uazapiCredentials = {
-            serverUrl: accounts[0].serverUrl || process.env.UAZAPI_BASE_URL || 'https://ruptur.uazapi.com',
-            adminToken: accounts[0].adminToken,
+            serverUrl:  accounts[0].serverUrl  || envServerUrl,
+            adminToken: accounts[0].adminToken || envAdminToken, // fallback → env
           };
         }
-      } catch { /* sem credenciais — controller retorna 503 */ }
-    }
-    if (!uazapiCredentials) {
-      uazapiCredentials = {
-        serverUrl: process.env.UAZAPI_BASE_URL || 'https://ruptur.uazapi.com',
-        adminToken: process.env.UAZAPI_TOKEN || process.env.UAZAPI_ADMIN_TOKEN,
-      };
+      } catch { /* sem credenciais — mantém env vars */ }
     }
 
     const matched = await registerWhatsappRoutes({

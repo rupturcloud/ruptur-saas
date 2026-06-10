@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
   "scripts": {
     "start": "node modules/warmup-core/server.mjs",
     "runtime": "node modules/warmup-core/server.mjs",

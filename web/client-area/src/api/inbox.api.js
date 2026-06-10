@@ -109,6 +109,38 @@ export const inboxApi = {
     });
   },
 
+  /** Apaga uma mensagem (para todos) */
+  deleteMessage(instanceKey, messageId) {
+    return call('/api/inbox/message/delete', {
+      method: 'POST',
+      body: { instanceKey, messageId },
+    });
+  },
+
+  /** Edita o texto de uma mensagem já enviada */
+  editMessage(instanceKey, messageId, text) {
+    return call('/api/inbox/message/edit', {
+      method: 'POST',
+      body: { instanceKey, messageId, text },
+    });
+  },
+
+  /** Fixa/desafixa uma mensagem */
+  pinMessage(instanceKey, messageId, { pin = true, duration } = {}) {
+    return call('/api/inbox/message/pin', {
+      method: 'POST',
+      body: { instanceKey, messageId, pin, duration },
+    });
+  },
+
+  /** Baixa a mídia de uma mensagem (opcionalmente transcreve áudio) */
+  downloadMessage(instanceKey, messageId, { transcribe = false } = {}) {
+    return call('/api/inbox/message/download', {
+      method: 'POST',
+      body: { instanceKey, messageId, transcribe },
+    });
+  },
+
   /** Etiquetas disponíveis na instância */
   getLabels(instanceKey) {
     return call(`/api/inbox/labels/${encodeURIComponent(instanceKey)}`);

@@ -147,6 +147,10 @@ export class UazapiAdapter extends IProviderAdapter {
     if (type === 'location') return this.sendLocation(instanceId, { number, ...rest });
     if (type === 'menu') return this.sendMenu(instanceId, { number, text: payload.text || content, ...rest });
     if (type === 'carousel') return this.sendCarousel(instanceId, { number, text: payload.text || content, ...rest });
+    if (type === 'pix-button') return this.sendPixButton(instanceId, { number, text: payload.text || content, ...rest });
+    if (type === 'request-payment') return this.sendRequestPayment(instanceId, { number, text: payload.text || content, ...rest });
+    if (type === 'location-button') return this.sendLocationButton(instanceId, { number, text: payload.text || content, ...rest });
+    if (type === 'status') return this.sendStatus(instanceId, { text: payload.text || content, ...rest });
 
     throw new ProviderAdapterError(`Unsupported message type: ${type}`, 'INVALID_MESSAGE_TYPE');
   }
@@ -205,6 +209,69 @@ export class UazapiAdapter extends IProviderAdapter {
       method: 'POST',
       body: payload,
     }, 'Failed to send payment request');
+  }
+
+  // Spec: POST /send/location-button — localização com botão interativo.
+  // FIX: era chamado em modules/campaigns/index.js sem existir aqui (quebrava em runtime).
+  async sendLocationButton(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/send/location-button', {
+      method: 'POST',
+      body: payload,
+    }, 'Failed to send location button');
+  }
+
+  // Spec: POST /send/status — publica status (stories) na instância.
+  async sendStatus(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/send/status', {
+      method: 'POST',
+      body: payload,
+    }, 'Failed to send status');
+  }
+
+  // ── Disparo em massa nativo (/sender/*) — arquitetura híbrida de campanhas ──
+  // A uazapi enfileira/dispara do lado dela e devolve um folder_id, que usamos
+  // como id da campanha remota para controle (/sender/edit) e reconciliação.
+
+  // Spec: POST /sender/simple — campanha simples (mesma mensagem para vários números).
+  async senderSimple(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/sender/simple', {
+      method: 'POST',
+      body: payload,
+    }, 'Failed to create simple sender');
+  }
+
+  // Spec: POST /sender/advanced — campanha avançada (lista de mensagens heterogêneas,
+  // suporta text/media/button/carousel/location, delayMin/Max e scheduled_for).
+  async senderAdvanced(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/sender/advanced', {
+      method: 'POST',
+      body: payload,
+    }, 'Failed to create advanced sender');
+  }
+
+  // Spec: POST /sender/edit — controle da campanha remota.
+  // action: 'stop' (pausar) | 'continue' (retomar) | 'delete' (remover não-enviadas).
+  async senderEdit(instanceId, { folder_id, action } = {}) {
+    return this.instanceRequest(instanceId, '/sender/edit', {
+      method: 'POST',
+      body: { folder_id, action },
+    }, 'Failed to edit sender');
+  }
+
+  // Spec: POST /sender/listfolders — lista campanhas (folders) da instância com status/contadores.
+  async senderListFolders(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/sender/listfolders', {
+      method: 'POST',
+      body: payload,
+    }, 'Failed to list sender folders');
+  }
+
+  // Spec: POST /sender/listmessages — lista mensagens de uma campanha (folder) com status de cada envio.
+  async senderListMessages(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/sender/listmessages', {
+      method: 'POST',
+      body: payload,
+    }, 'Failed to list sender messages');
   }
 
   async updateInstancePresence(instanceId, presence) {
@@ -484,6 +551,247 @@ export class UazapiAdapter extends IProviderAdapter {
     );
   }
 
+  // --- Novas rotas (OpenAPI 2.1.0 coverage) ---
+  
+  // Instance
+  async updateFieldsMap(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/instance/updateFieldsMap', { method: 'POST', body: payload }, 'Failed to update fields map');
+  }
+  async updateMessagePresence(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/message/presence', { method: 'POST', body: payload }, 'Failed to send message presence');
+  }
+
+  // Proxy
+  async getProxyManagedCities() {
+    return this.fetchJson(`${this.serverUrl}/proxy-managed/cities`, {}, 'Failed to get proxy managed cities');
+  }
+
+  // Group
+  async createGroup(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/create', { method: 'POST', body: payload }, 'Failed to create group');
+  }
+  async getGroupInfo(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/info', { method: 'POST', body: payload }, 'Failed to get group info');
+  }
+  async getGroupInviteInfo(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/inviteInfo', { method: 'POST', body: payload }, 'Failed to get group invite info');
+  }
+  async joinGroup(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/join', { method: 'POST', body: payload }, 'Failed to join group');
+  }
+  async leaveGroup(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/leave', { method: 'POST', body: payload }, 'Failed to leave group');
+  }
+  async listGroups(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/list', { method: 'POST', body: payload }, 'Failed to list groups');
+  }
+  async resetGroupInviteCode(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/resetInviteCode', { method: 'POST', body: payload }, 'Failed to reset group invite code');
+  }
+  async updateGroupAnnounce(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/updateAnnounce', { method: 'POST', body: payload }, 'Failed to update group announce');
+  }
+  async updateGroupJoinApproval(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/updateJoinApproval', { method: 'POST', body: payload }, 'Failed to update group join approval');
+  }
+  async updateGroupMemberAddMode(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/updateMemberAddMode', { method: 'POST', body: payload }, 'Failed to update group member add mode');
+  }
+  async updateGroupDescription(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/updateDescription', { method: 'POST', body: payload }, 'Failed to update group description');
+  }
+  async updateGroupEphemeral(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/ephemeral', { method: 'POST', body: payload }, 'Failed to update group ephemeral settings');
+  }
+  async updateGroupImage(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/updateImage', { method: 'POST', body: payload }, 'Failed to update group image');
+  }
+  async updateGroupLocked(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/updateLocked', { method: 'POST', body: payload }, 'Failed to update group locked');
+  }
+  async updateGroupName(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/updateName', { method: 'POST', body: payload }, 'Failed to update group name');
+  }
+  async updateGroupParticipants(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/group/updateParticipants', { method: 'POST', body: payload }, 'Failed to update group participants');
+  }
+
+  // Community
+  async createCommunity(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/community/create', { method: 'POST', body: payload }, 'Failed to create community');
+  }
+  async editCommunityGroups(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/community/editgroups', { method: 'POST', body: payload }, 'Failed to edit community groups');
+  }
+
+  // Newsletter (Channels)
+  async createNewsletter(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/create', { method: 'POST', body: payload }, 'Failed to create newsletter');
+  }
+  async listNewsletters(instanceId) {
+    return this.instanceRequest(instanceId, '/newsletter/list', { method: 'GET' }, 'Failed to list newsletters');
+  }
+  async getNewsletterInfo(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/info', { method: 'POST', body: payload }, 'Failed to get newsletter info');
+  }
+  async getNewsletterLink(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/link', { method: 'POST', body: payload }, 'Failed to get newsletter link');
+  }
+  async subscribeNewsletter(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/subscribe', { method: 'POST', body: payload }, 'Failed to subscribe newsletter');
+  }
+  async getNewsletterMessages(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/messages', { method: 'POST', body: payload }, 'Failed to get newsletter messages');
+  }
+  async editNewsletterMessage(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/messages/edit', { method: 'POST', body: payload }, 'Failed to edit newsletter message');
+  }
+  async deleteNewsletterMessage(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/messages/delete', { method: 'POST', body: payload }, 'Failed to delete newsletter message');
+  }
+  async getNewsletterUpdates(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/updates', { method: 'POST', body: payload }, 'Failed to get newsletter updates');
+  }
+  async markNewsletterViewed(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/viewed', { method: 'POST', body: payload }, 'Failed to mark newsletter viewed');
+  }
+  async reactNewsletterMessage(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/reaction', { method: 'POST', body: payload }, 'Failed to react to newsletter message');
+  }
+  async followNewsletter(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/follow', { method: 'POST', body: payload }, 'Failed to follow newsletter');
+  }
+  async unfollowNewsletter(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/unfollow', { method: 'POST', body: payload }, 'Failed to unfollow newsletter');
+  }
+  async muteNewsletter(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/mute', { method: 'POST', body: payload }, 'Failed to mute newsletter');
+  }
+  async unmuteNewsletter(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/unmute', { method: 'POST', body: payload }, 'Failed to unmute newsletter');
+  }
+  async deleteNewsletter(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/delete', { method: 'POST', body: payload }, 'Failed to delete newsletter');
+  }
+  async updateNewsletterPicture(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/picture', { method: 'POST', body: payload }, 'Failed to update newsletter picture');
+  }
+  async updateNewsletterName(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/name', { method: 'POST', body: payload }, 'Failed to update newsletter name');
+  }
+  async updateNewsletterDescription(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/description', { method: 'POST', body: payload }, 'Failed to update newsletter description');
+  }
+  async updateNewsletterSettings(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/settings', { method: 'POST', body: payload }, 'Failed to update newsletter settings');
+  }
+  async searchNewsletter(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/search', { method: 'POST', body: payload }, 'Failed to search newsletter');
+  }
+  async inviteNewsletterAdmin(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/admin/invite', { method: 'POST', body: payload }, 'Failed to invite newsletter admin');
+  }
+  async acceptNewsletterAdmin(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/admin/accept', { method: 'POST', body: payload }, 'Failed to accept newsletter admin');
+  }
+  async removeNewsletterAdmin(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/admin/remove', { method: 'POST', body: payload }, 'Failed to remove newsletter admin');
+  }
+  async revokeNewsletterAdmin(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/admin/revoke', { method: 'POST', body: payload }, 'Failed to revoke newsletter admin');
+  }
+  async transferNewsletterOwner(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/newsletter/owner/transfer', { method: 'POST', body: payload }, 'Failed to transfer newsletter owner');
+  }
+
+  // SSE
+  async connectSSE(instanceId) {
+    return this.instanceRequest(instanceId, '/sse', { method: 'GET' }, 'Failed to connect SSE');
+  }
+
+  // Sender
+  async senderClearDone(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/sender/cleardone', { method: 'POST', body: payload }, 'Failed to clear done sender tasks');
+  }
+  async senderClearAll(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/sender/clearall', { method: 'POST', body: payload }, 'Failed to clear all sender tasks');
+  }
+
+  // Chat
+  async blockChat(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/chat/block', { method: 'POST', body: payload }, 'Failed to block chat');
+  }
+  async getChatBlocklist(instanceId) {
+    return this.instanceRequest(instanceId, '/chat/blocklist', { method: 'GET' }, 'Failed to get chat blocklist');
+  }
+  async getChatLabels(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/chat/labels', { method: 'POST', body: payload }, 'Failed to get chat labels');
+  }
+  async deleteChat(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/chat/delete', { method: 'POST', body: payload }, 'Failed to delete chat');
+  }
+  async updateChatEphemeral(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/chat/ephemeral', { method: 'POST', body: payload }, 'Failed to update chat ephemeral');
+  }
+  async getChatNotes(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/chat/notes', { method: 'POST', body: payload }, 'Failed to get chat notes');
+  }
+  async refreshChatNotes(instanceId) {
+    return this.instanceRequest(instanceId, '/chat/notes/refresh', { method: 'POST', body: {} }, 'Failed to refresh chat notes');
+  }
+  async editChatNotes(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/chat/notes/edit', { method: 'POST', body: payload }, 'Failed to edit chat notes');
+  }
+  async editChatLead(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/chat/editLead', { method: 'POST', body: payload }, 'Failed to edit chat lead');
+  }
+
+  // Quick Replies
+  async editQuickReply(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/quickreply/edit', { method: 'POST', body: payload }, 'Failed to edit quick reply');
+  }
+  async showAllQuickReplies(instanceId) {
+    return this.instanceRequest(instanceId, '/quickreply/showall', { method: 'GET' }, 'Failed to get quick replies');
+  }
+
+  // Call
+  async makeCall(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/call/make', { method: 'POST', body: payload }, 'Failed to make call');
+  }
+  async rejectCall(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/call/reject', { method: 'POST', body: payload }, 'Failed to reject call');
+  }
+
+  // Chatwoot
+  async updateChatwootConfig(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/chatwoot/config', { method: 'POST', body: payload }, 'Failed to update chatwoot config');
+  }
+
+  // Business Catalog
+  async listBusinessCatalog(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/business/catalog/list', { method: 'POST', body: payload }, 'Failed to list business catalog');
+  }
+  async getBusinessCatalogInfo(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/business/catalog/info', { method: 'POST', body: payload }, 'Failed to get business catalog info');
+  }
+  async deleteBusinessCatalogProduct(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/business/catalog/delete', { method: 'POST', body: payload }, 'Failed to delete business catalog product');
+  }
+  async showBusinessCatalogProduct(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/business/catalog/show', { method: 'POST', body: payload }, 'Failed to show business catalog product');
+  }
+  async hideBusinessCatalogProduct(instanceId, payload = {}) {
+    return this.instanceRequest(instanceId, '/business/catalog/hide', { method: 'POST', body: payload }, 'Failed to hide business catalog product');
+  }
+
+  // Admin Operations
+  async restartAdmin() {
+    return this.adminRequest('/admin/restart', { method: 'POST' }, 'Failed to restart admin service');
+  }
+  async rotateAdminToken() {
+    return this.adminRequest('/admin/token/rotate', { method: 'POST' }, 'Failed to rotate admin token');
+  }
+
   normalizeInstance(raw) {
     return {
       id: raw.token || raw.id,
@@ -509,15 +817,328 @@ export class UazapiAdapter extends IProviderAdapter {
     };
   }
 
+
+  // --- NOVOS MÉTODOS UAZAPI 2.1.0 ---
+  
+  async updateFieldsMap(instanceId, fieldsMap) {
+    return this.instanceRequest(instanceId, '/instance/updateFieldsMap', { method: 'POST', body: { fieldsMap } });
+  }
+  async getProxyManagedCities() {
+    return this.adminRequest('/proxy/managed-cities');
+  }
+  async updateMessagePresence(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/message/presence', { method: 'POST', body: payload });
+  }
+
+  async createGroup(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/group/create', { method: 'POST', body: payload });
+  }
+  async getGroupInfo(instanceId, groupId) {
+    return this.instanceRequest(instanceId, `/group/info/${groupId}`);
+  }
+  async getGroupInviteInfo(instanceId, inviteCode) {
+    return this.instanceRequest(instanceId, `/group/inviteInfo/${inviteCode}`);
+  }
+  async editGroupInfo(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/group/edit', { method: 'POST', body: payload });
+  }
+  async getGroupAdmins(instanceId, groupId) {
+    return this.instanceRequest(instanceId, `/group/admins/${groupId}`);
+  }
+  async getGroupMembers(instanceId, groupId) {
+    return this.instanceRequest(instanceId, `/group/members/${groupId}`);
+  }
+  async editGroupMembers(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/group/members/edit', { method: 'POST', body: payload });
+  }
+  async leaveGroup(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/group/leave', { method: 'POST', body: payload });
+  }
+  async getGroupInviteLink(instanceId, groupId) {
+    return this.instanceRequest(instanceId, `/group/inviteLink/${groupId}`);
+  }
+  async revokeGroupInviteLink(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/group/inviteLink/revoke', { method: 'POST', body: payload });
+  }
+  async setGroupPic(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/group/pic/set', { method: 'POST', body: payload });
+  }
+  async groupEphemeral(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/group/ephemeral', { method: 'POST', body: payload });
+  }
+
+  async createCommunity(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/community/create', { method: 'POST', body: payload });
+  }
+  async editCommunityGroups(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/community/groups/edit', { method: 'POST', body: payload });
+  }
+
+  async createNewsletter(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/newsletter/create', { method: 'POST', body: payload });
+  }
+  async listNewsletters(instanceId) {
+    return this.instanceRequest(instanceId, '/newsletter/list');
+  }
+  async getNewsletterInfo(instanceId, newsletterId) {
+    return this.instanceRequest(instanceId, `/newsletter/info/${newsletterId}`);
+  }
+  async muteNewsletter(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/newsletter/mute', { method: 'POST', body: payload });
+  }
+  async editNewsletterMembers(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/newsletter/members/edit', { method: 'POST', body: payload });
+  }
+  async deleteNewsletter(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/newsletter/delete', { method: 'POST', body: payload });
+  }
+
+  connectSSE(instanceId) {
+    if (!instanceId) throw new ProviderAdapterError('Instance token required', 'MISSING_CREDENTIALS');
+    return `${this.serverUrl}/sse/messages?token=${instanceId}`;
+  }
+
+  async blockChat(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/chat/block', { method: 'POST', body: payload });
+  }
+  async getChatBlocklist(instanceId) {
+    return this.instanceRequest(instanceId, '/chat/blocklist');
+  }
+  async getChatLabels(instanceId) {
+    return this.instanceRequest(instanceId, '/chat/labels');
+  }
+  async deleteChat(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/chat/delete', { method: 'POST', body: payload });
+  }
+  async updateChatEphemeral(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/chat/ephemeral', { method: 'POST', body: payload });
+  }
+  async getChatNotes(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/chat/notes', { method: 'POST', body: payload });
+  }
+  async refreshChatNotes(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/chat/notes/refresh', { method: 'POST', body: payload });
+  }
+  async editChatNotes(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/chat/notes/edit', { method: 'POST', body: payload });
+  }
+  async editChatLead(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/chat/editLead', { method: 'POST', body: payload });
+  }
+
+  async editQuickReply(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/quickreply/edit', { method: 'POST', body: payload });
+  }
+  async showAllQuickReplies(instanceId) {
+    return this.instanceRequest(instanceId, '/quickreply/showAll');
+  }
+
+  async makeCall(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/call/make', { method: 'POST', body: payload });
+  }
+  async rejectCall(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/call/reject', { method: 'POST', body: payload });
+  }
+
+  async getChatwootConfig(instanceId) {
+    return this.instanceRequest(instanceId, '/chatwoot/config');
+  }
+  async updateChatwootConfig(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/chatwoot/config', { method: 'POST', body: payload });
+  }
+
+  async listBusinessCatalog(instanceId, number) {
+    return this.instanceRequest(instanceId, `/catalog/list/${number}`);
+  }
+
+  async restartAdmin(payload = {}) {
+    return this.adminRequest('/admin/restart', { method: 'POST', body: payload });
+  }
+  async rotateAdminToken(payload = {}) {
+    return this.adminRequest('/admin/rotateToken', { method: 'POST', body: payload });
+  }
+
   normalizeCredentials(raw) {
+
     return {
       serverUrl: raw.serverUrl || 'https://tiatendeai.uazapi.com',
       adminToken: raw.adminToken,
       instanceToken: raw.instanceToken,
     };
   }
+  // ─── MÉTODOS ADICIONADOS PARA OPENAPI 2.1.0 (CHATS, GRUPOS, CHATWOOT, ETC) ───
+  
+  async getChatwootConfig(instanceId) {
+    return this.instanceRequest(instanceId, '/chatwoot/config', { method: 'GET' }, 'Failed to get Chatwoot config');
+  }
+
+  async updateChatwootConfig(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/chatwoot/config', { method: 'POST', body: payload }, 'Failed to update Chatwoot config');
+  }
+
+  async editLead(instanceId, chatId, fields) {
+    return this.instanceRequest(instanceId, '/chat/editLead', { 
+      method: 'POST', 
+      body: { id: chatId, ...fields } 
+    }, 'Failed to edit lead');
+  }
+
+  async connectSSE(instanceId) {
+    return this.instanceRequest(instanceId, '/instance/sse', { method: 'GET' }, 'Failed to connect SSE');
+  }
+
+  async findChats(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/chat/find', { method: 'POST', body: payload }, 'Failed to find chats');
+  }
+
+  async findMessages(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/message/find', { method: 'POST', body: payload }, 'Failed to find messages');
+  }
+
+  async markRead(instanceId, number) {
+    return this.instanceRequest(instanceId, '/chat/read', { method: 'POST', body: { number, read: true } }, 'Failed to mark read');
+  }
+
+  async blockChat(instanceId, number, action = 'block') {
+    return this.instanceRequest(instanceId, '/chat/block', { method: 'POST', body: { number, action } }, 'Failed to block/unblock chat');
+  }
+
+  async getChatBlocklist(instanceId) {
+    return this.instanceRequest(instanceId, '/chat/blocklist', { method: 'GET' }, 'Failed to get blocklist');
+  }
+
+  async getChatLabels(instanceId) {
+    return this.instanceRequest(instanceId, '/labels', { method: 'GET' }, 'Failed to get labels');
+  }
+
+  async deleteChat(instanceId, number) {
+    return this.instanceRequest(instanceId, '/chat/delete', { method: 'POST', body: { number } }, 'Failed to delete chat');
+  }
+
+  async updateChatEphemeral(instanceId, number, duration) {
+    return this.instanceRequest(instanceId, '/chat/ephemeral', { method: 'POST', body: { number, duration } }, 'Failed to update ephemeral');
+  }
+
+  async getChatNotes(instanceId, number) {
+    return this.instanceRequest(instanceId, '/chat/notes', { method: 'POST', body: { number } }, 'Failed to get chat notes');
+  }
+
+  async refreshChatNotes(instanceId, number, force = false) {
+    return this.instanceRequest(instanceId, '/chat/notes/refresh', { method: 'POST', body: { number, force } }, 'Failed to refresh chat notes');
+  }
+
+  async editChatNotes(instanceId, number, notes) {
+    return this.instanceRequest(instanceId, '/chat/notes/edit', { method: 'POST', body: { number, notes } }, 'Failed to edit chat notes');
+  }
+
+  async updateMessagePresence(instanceId, number, presence, delay) {
+    return this.instanceRequest(instanceId, '/message/presence', { method: 'POST', body: { number, presence, delay } }, 'Failed to update presence');
+  }
+
+  async createGroup(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/group/create', { method: 'POST', body: payload }, 'Failed to create group');
+  }
+
+  async getGroupInfo(instanceId, groupJid) {
+    return this.instanceRequest(instanceId, '/group/find', { method: 'POST', body: { id: groupJid } }, 'Failed to get group info');
+  }
+
+  async getGroupInviteInfo(instanceId, inviteCode) {
+    return this.instanceRequest(instanceId, '/group/inviteInfo', { method: 'POST', body: { inviteCode } }, 'Failed to get group invite info');
+  }
+
+  async createCommunity(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/community/create', { method: 'POST', body: payload }, 'Failed to create community');
+  }
+
+  async editCommunityGroups(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/community/editGroups', { method: 'POST', body: payload }, 'Failed to edit community groups');
+  }
+
+  async createNewsletter(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/newsletter/create', { method: 'POST', body: payload }, 'Failed to create newsletter');
+  }
+
+  async listNewsletters(instanceId) {
+    return this.instanceRequest(instanceId, '/newsletter/list', { method: 'GET' }, 'Failed to list newsletters');
+  }
+
+  async editQuickReply(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/quickreply/edit', { method: 'POST', body: payload }, 'Failed to edit quick reply');
+  }
+
+  async showAllQuickReplies(instanceId) {
+    return this.instanceRequest(instanceId, '/quickreply/all', { method: 'GET' }, 'Failed to get quick replies');
+  }
+
+  async makeCall(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/call/make', { method: 'POST', body: payload }, 'Failed to make call');
+  }
+
+  async rejectCall(instanceId, payload) {
+    return this.instanceRequest(instanceId, '/call/reject', { method: 'POST', body: payload }, 'Failed to reject call');
+  }
+
+  async listBusinessCatalog(instanceId, jid) {
+    return this.instanceRequest(instanceId, '/business/catalog', { method: 'POST', body: { jid } }, 'Failed to get catalog');
+  }
+
+  async updateFieldsMap(instanceId, fieldsMap) {
+    return this.instanceRequest(instanceId, '/instance/fieldsMap', { method: 'POST', body: { fieldsMap } }, 'Failed to update fields map');
+  }
+
+  async getProxyManagedCities(instanceId) {
+    return this.instanceRequest(instanceId, '/proxy/managedCities', { method: 'GET' }, 'Failed to get proxy managed cities');
+  }
+
+  async restartAdmin() {
+    return this.adminRequest('/admin/restart', { method: 'POST' }, 'Failed to restart admin');
+  }
+
+  async rotateAdminToken() {
+    return this.adminRequest('/admin/rotateToken', { method: 'POST' }, 'Failed to rotate admin token');
+  }
+
+
 }
 
 export function createUazapiAdapter(credentials) {
   return new UazapiAdapter(credentials);
+}
+
+/**
+ * Monta o array `choices` da UazAPI (/sender/simple e /sender/advanced) a partir
+ * dos botões da campanha.
+ *
+ * Formato UazAPI:
+ *   - botão de resposta (sem link): apenas o texto → "Texto do Botão"
+ *   - botão de URL: texto e URL separados por pipe → "Texto do Botão|https://link.com"
+ *
+ * Regra de negócio (documentada): o WhatsApp Web NÃO permite misturar botões de
+ * URL com botões de resposta no mesmo conjunto (gera aviso/inconsistência). Por
+ * isso, se ALGUM botão tiver url, o conjunto é tratado como conjunto de URL e os
+ * botões SEM url são descartados (caminho mais simples e seguro — evita um
+ * payload misto inválido). Se NENHUM botão tiver url, mantém-se o comportamento
+ * legado (somente texto).
+ *
+ * @param {Array<{text?: string, url?: string}|string>} buttons
+ * @returns {string[]} choices no formato aceito pela UazAPI
+ */
+export function buildButtonChoices(buttons) {
+  const list = (Array.isArray(buttons) ? buttons : [])
+    .map((b) => (typeof b === 'string' ? { text: b } : (b || {})))
+    .filter((b) => b.text && String(b.text).trim());
+
+  const hasUrl = list.some((b) => b.url && String(b.url).trim());
+
+  if (!hasUrl) {
+    // Legado: botões de resposta, só texto.
+    return list.map((b) => String(b.text).trim());
+  }
+
+  // Conjunto de URL: mantém só os botões com url (descarta os sem link para
+  // não gerar um conjunto misto inválido no WhatsApp Web).
+  return list
+    .filter((b) => b.url && String(b.url).trim())
+    .map((b) => `${String(b.text).trim()}|${String(b.url).trim()}`);
 }

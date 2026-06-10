@@ -1,15 +1,18 @@
 /**
  * Inbox Module - Central message management
- * 
- * Handles inbox functionality for all WhatsApp instances
- * Integrates with UAZAPI for message retrieval and Bubble for storage
+ *
+ * Gerencia o estado in-memory de inbox por instância para os endpoints legados
+ * de /api/inbox/* servidos pelo warmup-core (summary, send, getMessages, markAsRead).
+ *
+ * Persistência: a fonte de verdade é a própria UAZAPI. A UI rica nova consulta a
+ * UAZAPI direto via api/routes-inbox.mjs (/chat/find, /message/find, /sse, etc.).
+ * O storage legado em Bubble foi REMOVIDO (Fase 1) — não há mais dependência do
+ * Bubble aqui. Este manager mantém apenas um cache volátil em memória.
  */
 
 import UaZAPIClient from '../../integrations/uazapi/client.js';
-import BubbleClient from '../../integrations/bubble/client.js';
 
 const uazapiClient = new UaZAPIClient();
-const bubbleClient = new BubbleClient();
 
 export class InboxManager {
   constructor() {
@@ -45,10 +48,7 @@ export class InboxManager {
         unreadCount: 0
       });
 
-      // Load existing messages for this instance from Bubble
-      await this.loadMessagesFromBubble(instanceId, tenantId);
-
-      // Start message polling
+      // Start message polling (popula o cache a partir da UAZAPI)
       this.startMessagePolling(instanceId);
       
       console.log(`[Inbox] Instance ${instanceId} initialized successfully for tenant ${tenantId}`);
@@ -56,41 +56,6 @@ export class InboxManager {
     } catch (error) {
       console.error(`[Inbox] Failed to initialize instance ${instanceId}:`, error.message);
       return false;
-    }
-  }
-
-  /**
-   * Load messages from Bubble for an instance
-   */
-  async loadMessagesFromBubble(instanceId, tenantId) {
-    try {
-      const messages = await bubbleClient.getThings('Message', {
-        constraints: [
-          { key: 'instanceId', constraint_type: 'equals', value: instanceId },
-          { key: 'tenantId', constraint_type: 'equals', value: tenantId }
-        ],
-        limit: 100
-      });
-
-      if (messages && messages.length > 0) {
-        for (const msg of messages) {
-          const messageId = `${instanceId}_${msg.messageId || msg.id}`;
-          this.messages.set(messageId, {
-            ...msg,
-            id: messageId,
-            instanceId,
-            tenantId,
-            timestamp: new Date(msg.timestamp || msg.CreatedDate),
-            read: msg.read || false
-          });
-        }
-        
-        // Update unread count based on loaded messages
-        const unreadCount = messages.filter(m => !m.read).length;
-        this.unreadCounts.set(instanceId, unreadCount);
-      }
-    } catch (error) {
-      console.error(`[Inbox] Error loading messages from Bubble for ${instanceId}:`, error.message);
     }
   }
 
@@ -175,9 +140,6 @@ export class InboxManager {
       const currentCount = this.unreadCounts.get(instanceId) || 0;
       this.unreadCounts.set(instanceId, currentCount + 1);
 
-      // Send to Bubble for storage
-      await this.storeMessageInBubble(messageData);
-
       // Trigger webhook for real-time updates
       await this.triggerWebhook('message.received', {
         instanceId,
@@ -188,27 +150,6 @@ export class InboxManager {
       console.log(`[Inbox] New message processed: ${messageId} (Tenant: ${tenantId})`);
     } catch (error) {
       console.error(`[Inbox] Error processing message:`, error.message);
-    }
-  }
-
-  /**
-   * Store message in Bubble
-   */
-  async storeMessageInBubble(message) {
-    try {
-      await bubbleClient.createRecord('Message', {
-        messageId: message.id,
-        instanceId: message.instanceId,
-        tenantId: message.tenantId,
-        sender: message.sender,
-        receiver: message.receiver,
-        content: message.content,
-        messageType: message.type || 'text',
-        timestamp: message.timestamp,
-        read: message.read || false
-      });
-    } catch (error) {
-      console.error(`[Inbox] Error storing message in Bubble:`, error.message);
     }
   }
 
@@ -268,9 +209,6 @@ export class InboxManager {
         const currentCount = this.unreadCounts.get(instanceId) || 0;
         this.unreadCounts.set(instanceId, Math.max(0, currentCount - 1));
 
-        // Update in Bubble
-        await bubbleClient.updateRecord('Message', message.id, { read: true });
-
         console.log(`[Inbox] Message marked as read: ${messageId}`);
         return true;
       }
@@ -316,7 +254,6 @@ export class InboxManager {
       };
 
       this.messages.set(`${instanceId}_${result.messageId}`, message);
-      await this.storeMessageInBubble(message);
 
       console.log(`[Inbox] Message sent: ${result.messageId} (Tenant: ${tenantId})`);
       return result;

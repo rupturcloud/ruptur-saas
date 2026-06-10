@@ -431,8 +431,12 @@ function lastMsgPreview(chat) {
 }
 
 function msgText(msg) {
-  const m = msg.message || {};
+  const m = msg.message || msg.content || msg;
   return (
+    msg.text || 
+    m.text ||
+    m.body ||
+    msg.body ||
     m.conversation ||
     m.extendedTextMessage?.text ||
     m.imageMessage?.caption ||
@@ -576,10 +580,14 @@ export default function Inbox() {
   const loadInstances = useCallback(async () => {
     try {
       const { instances: rows = [] } = await inboxApi.listInstances();
-      setInstances(rows);
-      const connected = rows.find(r => (r.status || '').toLowerCase() === 'connected');
-      const first = connected || rows[0];
-      if (first) setInstanceKey(first.key);
+      // Sempre adicionamos a opção de "Todas as Instâncias" (Global) no topo
+      const allRows = [{ key: 'all', id: 'all', name: 'Todas as Instâncias', status: 'connected', phone: '' }, ...rows];
+      setInstances(allRows);
+      
+      const savedKey = window.localStorage.getItem('inbox_last_instance');
+      // Resolve compatibilidade entre id e key
+      const targetKey = savedKey && allRows.find(r => (r.key || r.id) === savedKey) ? savedKey : 'all';
+      setInstanceKey(targetKey);
     } catch (e) {
       console.warn('[Inbox] listInstances falhou:', e.message);
     }
@@ -590,12 +598,17 @@ export default function Inbox() {
   // setState síncrono dentro de useEffect (cascata de renders).
   const changeInstance = useCallback((key) => {
     setInstanceKey(key);
+    window.localStorage.setItem('inbox_last_instance', key);
     setActiveChat(null);
     setMessages([]);
     setActiveLabel(null);
   }, []);
 
   const loadLabels = useCallback(async (key) => {
+    if (key === 'all') {
+      setLabels([]);
+      return;
+    }
     try {
       const { labels: rows = [] } = await inboxApi.getLabels(key);
       setLabels(Array.isArray(rows) ? rows : []);
@@ -610,36 +623,56 @@ export default function Inbox() {
     if (!silent) { setChatsLoading(true); setInstanceExpired(false); }
     try {
       const filters = buildFilters({ tab, label: activeLabel, groupsOnly, userId });
-      const res = await inboxApi.findChats(instanceKey, { filters, limit: 60 });
-      const rows = res.chats || [];
-      if (res.freeTrialExpired || res.error === 'INSTANCE_EXPIRED') {
-        setInstanceExpired(true); setChats([]); setUnread(0);
+      let rows = [];
+
+      if (instanceKey === 'all') {
+        const activeInsts = instances.filter(i => i.key !== 'all' && i.status === 'connected');
+        if (activeInsts.length === 0) {
+          setChats([]); setUnread(0); return;
+        }
+        const promises = activeInsts.map(i =>
+          inboxApi.findChats(i.key || i.id, { filters, limit: 40 })
+            .then(res => (res.chats || []).map(chat => ({ ...chat, _sourceInstance: i })))
+            .catch(() => [])
+        );
+        const results = await Promise.all(promises);
+        rows = results.flat().sort((a, b) => (b.wa_lastMsgTimestamp || 0) - (a.wa_lastMsgTimestamp || 0));
       } else {
-        setChats(rows);
-        // Badge dinâmico da sidebar: soma de conversas não-lidas da instância atual
-        setUnread(rows.reduce((s, c) => s + (c.wa_unreadCount || 0), 0));
+        const res = await inboxApi.findChats(instanceKey, { filters, limit: 60 });
+        if (res.freeTrialExpired || res.error === 'INSTANCE_EXPIRED') {
+          setInstanceExpired(true); setChats([]); setUnread(0); return;
+        }
+        rows = res.chats || [];
+        const i = instances.find(inst => (inst.key || inst.id) === instanceKey);
+        if (i) rows = rows.map(chat => ({ ...chat, _sourceInstance: i }));
       }
+
+      setChats(rows);
+      setUnread(rows.reduce((s, c) => s + (c.wa_unreadCount || 0), 0));
     } catch (e) {
       console.warn('[Inbox] findChats falhou:', e.message);
       if (!silent) setChats([]);
     } finally {
       if (!silent) setChatsLoading(false);
     }
-  }, [instanceKey, tab, activeLabel, groupsOnly, userId, setUnread]);
+  }, [instanceKey, tab, activeLabel, groupsOnly, userId, setUnread, instances]);
 
   const loadMessages = useCallback(async (chat, silent) => {
-    if (!instanceKey || !chat) return;
+    if (!chat) return;
+    const targetKey = chat._sourceInstance?.key || chat._sourceInstance?.id || instanceKey;
+    if (!targetKey || targetKey === 'all') return;
+    
     const chatId = chat.wa_chatid || chat.wa_fastid;
     if (!chatId) return;
     if (!silent) { setMsgsLoading(true); setMessages([]); }
     try {
-      const res = await inboxApi.findMessages(instanceKey, chatId, { limit: 80 });
+      const res = await inboxApi.findMessages(targetKey, chatId, { limit: 80 });
       const rows = (res.messages || []).slice().sort((a, b) => msgTs(a) - msgTs(b));
       setMessages(rows);
       // markread best-effort para mensagens recebidas, só se houver não-lidas
       if (!silent && (chat.wa_unreadCount || 0) > 0) {
         const ids = rows.filter(m => !isFromMe(m)).map(msgId).filter(Boolean);
-        if (ids.length) inboxApi.markRead(instanceKey, ids).catch(() => {});
+        if (ids.length) inboxApi.markRead(targetKey, ids).catch(() => {});
       }
     } catch (e) {
       console.warn('[Inbox] findMessages falhou:', e.message);
@@ -684,7 +717,8 @@ export default function Inbox() {
   // SSE: tempo real com fallback no polling (refs mantêm a subscrição estável)
   useEffect(() => {
     if (!instanceKey || !authReady) return;
-    let es; let refreshT;
+    let esConnections = []; 
+    let refreshT;
     const signal = () => {
       clearTimeout(refreshT);
       refreshT = setTimeout(() => {
@@ -694,16 +728,29 @@ export default function Inbox() {
       }, 1200);
     };
     try {
-      es = new EventSource(inboxApi.sseUrl(instanceKey));
-      es.onopen = () => setSseLive(true);
-      es.onerror = () => setSseLive(false);
-      es.addEventListener('messages', signal);
-      es.addEventListener('messages_update', signal);
+      const keys = instanceKey === 'all' 
+         ? instances.filter(i => i.key !== 'all' && i.status === 'connected').map(i => i.key || i.id)
+         : [instanceKey];
+         
+      if (keys.length > 0) {
+         esConnections = keys.map(k => {
+           const e = new EventSource(inboxApi.sseUrl(k));
+           e.onopen = () => setSseLive(true);
+           e.onerror = () => setSseLive(false);
+           e.addEventListener('messages', signal);
+           e.addEventListener('messages_update', signal);
+           return e;
+         });
+      }
     } catch (e) {
       console.warn('[Inbox] SSE indisponível, usando polling:', e.message);
     }
-    return () => { clearTimeout(refreshT); setSseLive(false); try { es?.close(); } catch { /* noop */ } };
-  }, [instanceKey, authReady]);
+    return () => { 
+      clearTimeout(refreshT); 
+      setSseLive(false); 
+      esConnections.forEach(e => { try { e.close(); } catch { /* noop */ } }); 
+    };
+  }, [instanceKey, authReady, instances]);
 
   // Feedback some sozinho
   useEffect(() => {
@@ -730,7 +777,14 @@ export default function Inbox() {
   // -- Ações ----------------------------------------------------------------
   async function handleSend() {
     const text = replyText.trim();
-    if (!text || !instanceKey || !activeChat || sending) return;
+    if (!text || !activeChat || sending) return;
+    
+    const targetKey = activeChat._sourceInstance?.key || activeChat._sourceInstance?.id || instanceKey;
+    if (!targetKey || targetKey === 'all') {
+       setFeedback('Instância não identificada para envio.');
+       return;
+    }
+    
     const to = activeChat.wa_chatid || activeChat.wa_fastid;
     if (!to) return;
     setSending(true);
@@ -738,7 +792,7 @@ export default function Inbox() {
     const optimistic = { messageid: `local-${messages.length}-${text.length}`, fromMe: true, messageTimestamp: Math.floor(new Date().getTime() / 1000), message: { conversation: text } };
     setMessages(prev => [...prev, optimistic]);
     try {
-      await inboxApi.send(instanceKey, to, text);
+      await inboxApi.send(targetKey, to, text);
       reloadChats(true);
     } catch (e) {
       console.warn('[Inbox] send falhou:', e.message);
@@ -752,12 +806,15 @@ export default function Inbox() {
 
   /** Aplica campos de lead via editLead, atualiza chat ativo e lista */
   async function patchLead(fields, okMsg) {
-    if (!instanceKey || !activeChat) return;
+    if (!activeChat) return;
+    const targetKey = activeChat._sourceInstance?.key || activeChat._sourceInstance?.id || instanceKey;
+    if (!targetKey || targetKey === 'all') return;
+    
     const chatId = activeChat.wa_chatid || activeChat.wa_fastid;
     if (!chatId) return;
     setSavingLead(true);
     try {
-      await inboxApi.editLead(instanceKey, chatId, fields);
+      await inboxApi.editLead(targetKey, chatId, fields);
       setActiveChat(prev => (prev ? { ...prev, ...fields } : prev));
       setChats(prev => prev.map(c => ((c.wa_chatid || c.wa_fastid) === chatId ? { ...c, ...fields } : c)));
       if (okMsg) setFeedback(okMsg);

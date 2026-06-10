@@ -19,11 +19,10 @@
  *   /sse               — Server-Sent Events para tempo real (eventos: messages, messages_update, connection)
  *   /group/list        — lista grupos da instância
  *
- * Conexão com Bubble (legada):
- *   O módulo modules/inbox/index.js ainda usa BubbleClient para storage.
- *   Esse proxy bypassa o Bubble e chama UAZAPI diretamente — é a nova arquitetura.
- *   A tabela uazapi_chats no Supabase (referenciada em InboxV2.jsx) pode ser
- *   alimentada via webhook UAZAPI → /api/bubble/validate → Supabase (já implementado).
+ * Arquitetura de storage:
+ *   A fonte de verdade é a própria UAZAPI — este proxy a consulta diretamente.
+ *   O storage legado em Bubble foi REMOVIDO (Fase 1). Eventos em tempo real
+ *   chegam via /sse (relay abaixo) e via webhook UAZAPI → Supabase (uazapi_chats).
  *
  * Auth:
  *   - Endpoints regulares UAZAPI: header 'token' com remote_instance_id
@@ -92,7 +91,9 @@ async function resolveInstance(supabase, tenantId, instanceKey) {
 }
 
 // ─── Helper: criar adapter UAZAPI para uma instância ───────────────────────────
-async function getAdapterForInstance(supabase, tenantId, instanceKey) {
+// Exportado para reuso por outros módulos (ex.: CRM) que também falam com a UAZAPI
+// mantendo o mesmo isolamento por tenant.
+export async function getAdapterForInstance(supabase, tenantId, instanceKey) {
   const resolved = await resolveInstance(supabase, tenantId, instanceKey);
   const adapter = createUazapiAdapter({
     serverUrl: resolved.serverUrl,
@@ -387,6 +388,83 @@ export async function handleEditLead(req, res, json, supabase) {
       body: { id: chatId, ...leadFields },
     }, 'Failed to edit lead');
     return json(res, 200, { updated: true, result }, req);
+  } catch (e) {
+    return json(res, 500, { error: e.message }, req);
+  }
+}
+
+// ─── ROTA: POST /api/inbox/message/delete ──────────────────────────────────────
+/**
+ * Apaga uma mensagem (para todos). Spec UAZAPI: POST /message/delete
+ * Body: { instanceKey, messageId }
+ */
+export async function handleDeleteMessage(req, res, json, supabase) {
+  const tenantId = req.user?.tenantId || req.tenantId;
+  if (!tenantId) return json(res, 403, { error: 'Tenant não identificado' }, req);
+  const { instanceKey, messageId } = req.body || {};
+  if (!instanceKey || !messageId) return json(res, 400, { error: 'instanceKey e messageId obrigatórios' }, req);
+  try {
+    const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, instanceKey);
+    const result = await adapter.deleteMessage(resolved.token, { id: messageId });
+    return json(res, 200, { deleted: true, result }, req);
+  } catch (e) {
+    return json(res, 500, { error: e.message }, req);
+  }
+}
+
+// ─── ROTA: POST /api/inbox/message/edit ────────────────────────────────────────
+/**
+ * Edita o texto de uma mensagem já enviada. Spec UAZAPI: POST /message/edit
+ * Body: { instanceKey, messageId, text }
+ */
+export async function handleEditMessage(req, res, json, supabase) {
+  const tenantId = req.user?.tenantId || req.tenantId;
+  if (!tenantId) return json(res, 403, { error: 'Tenant não identificado' }, req);
+  const { instanceKey, messageId, text } = req.body || {};
+  if (!instanceKey || !messageId || !text) return json(res, 400, { error: 'instanceKey, messageId e text obrigatórios' }, req);
+  try {
+    const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, instanceKey);
+    const result = await adapter.editMessage(resolved.token, { id: messageId, text });
+    return json(res, 200, { edited: true, result }, req);
+  } catch (e) {
+    return json(res, 500, { error: e.message }, req);
+  }
+}
+
+// ─── ROTA: POST /api/inbox/message/pin ─────────────────────────────────────────
+/**
+ * Fixa/desafixa uma mensagem. Spec UAZAPI: POST /message/pin
+ * Body: { instanceKey, messageId, pin?: boolean, duration?: number }
+ */
+export async function handlePinMessage(req, res, json, supabase) {
+  const tenantId = req.user?.tenantId || req.tenantId;
+  if (!tenantId) return json(res, 403, { error: 'Tenant não identificado' }, req);
+  const { instanceKey, messageId, pin = true, duration } = req.body || {};
+  if (!instanceKey || !messageId) return json(res, 400, { error: 'instanceKey e messageId obrigatórios' }, req);
+  try {
+    const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, instanceKey);
+    const result = await adapter.pinMessage(resolved.token, { id: messageId, pin, ...(duration ? { duration } : {}) });
+    return json(res, 200, { pinned: pin, result }, req);
+  } catch (e) {
+    return json(res, 500, { error: e.message }, req);
+  }
+}
+
+// ─── ROTA: POST /api/inbox/message/download ────────────────────────────────────
+/**
+ * Baixa a mídia de uma mensagem (opcionalmente transcreve áudio).
+ * Spec UAZAPI: POST /message/download
+ * Body: { instanceKey, messageId, transcribe?: boolean }
+ */
+export async function handleDownloadMessage(req, res, json, supabase) {
+  const tenantId = req.user?.tenantId || req.tenantId;
+  if (!tenantId) return json(res, 403, { error: 'Tenant não identificado' }, req);
+  const { instanceKey, messageId, transcribe = false } = req.body || {};
+  if (!instanceKey || !messageId) return json(res, 400, { error: 'instanceKey e messageId obrigatórios' }, req);
+  try {
+    const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, instanceKey);
+    const result = await adapter.downloadMessage(resolved.token, { id: messageId, transcribe });
+    return json(res, 200, { result }, req);
   } catch (e) {
     return json(res, 500, { error: e.message }, req);
   }

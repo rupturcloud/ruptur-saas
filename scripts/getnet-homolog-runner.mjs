@@ -125,7 +125,7 @@ async function runTest(sheet, testId, description, fn) {
 
 await runTest('1-Authentication', 'auth_success', 'OAuth2 com credenciais corretas', async () => {
   const request = {
-    endpoint: `${billing.baseUrl}/auth/oauth/v2/token`,
+    endpoint: `${billing.baseUrl}/authentication/oauth2/access_token`,
     method: 'POST',
     grant_type: 'client_credentials',
     client_id: billing.clientId,
@@ -151,7 +151,7 @@ await runTest('1-Authentication', 'auth_success', 'OAuth2 com credenciais corret
 
 await runTest('1-Authentication', 'auth_failure', 'OAuth2 com client_secret inválido — espera HTTP 401', async () => {
   const request = {
-    endpoint: `${billing.baseUrl}/auth/oauth/v2/token`,
+    endpoint: `${billing.baseUrl}/authentication/oauth2/access_token`,
     method: 'POST',
     grant_type: 'client_credentials',
     client_id: billing.clientId,
@@ -196,251 +196,72 @@ await runTest('1-Authentication', 'auth_failure', 'OAuth2 com client_secret inv�
 //  SHEET 2 — Tokenization
 // ════════════════════════════════════════════════════════════════════════════════
 
-await runTest('2-Tokenization', 'tokenize_card_success', `Tokenizar cartão aprovado (${HOMOLOG_CARDS.approved})`, async () => {
-  const cardNumber   = HOMOLOG_CARDS.approved;
-  const customerId   = 'homolog-customer-001';
-
-  const request = {
-    endpoint: `${billing.baseUrl}/v1/tokens/card`,
-    method: 'POST',
-    card_number: `${cardNumber.slice(0, 6)}...${cardNumber.slice(-4)}`,
-    customer_id: customerId,
-  };
-
-  const response = await billing.tokenizeCard(cardNumber, customerId);
-  state.numberToken = response.number_token;
-
+await runTest('2-Tokenization', 'tokenize_card_note', 'Tokenização — V2 Global aceita card.number direto', async () => {
+  // O endpoint de tokenização do V2 Global não está na doc pública e retorna 403 nos candidatos testados.
+  // Para homologação, o PAN (card.number) é enviado direto no payload de pagamento (cartões de teste).
+  // Em produção: usar campos hospedados / number_token conforme orientação Getnet, se exigido pelo checklist.
   return {
-    status: response.number_token ? 'PASS' : 'FAIL',
-    request,
-    response: {
-      number_token: response.number_token,
-      token_truncated: response.number_token ? `${response.number_token.slice(0, 10)}...` : null,
-    },
-  };
-});
-
-await runTest('2-Tokenization', 'tokenize_card_duplicate', 'Tokenizar mesmo cartão duas vezes — verificar comportamento', async () => {
-  const cardNumber = HOMOLOG_CARDS.approved;
-  const customerId = 'homolog-customer-001';
-
-  const request = {
-    endpoint: `${billing.baseUrl}/v1/tokens/card`,
-    method: 'POST',
-    card_number: `${cardNumber.slice(0, 6)}...${cardNumber.slice(-4)}`,
-    customer_id: customerId,
-    note: 'Segunda tokenização do mesmo cartão',
-  };
-
-  const response = await billing.tokenizeCard(cardNumber, customerId);
-  const sameToken = response.number_token === state.numberToken;
-
-  return {
-    status: 'PASS',
-    request,
-    response: {
-      number_token: response.number_token,
-      same_token_as_first: sameToken,
-      note: sameToken
-        ? 'API retornou o mesmo token (comportamento idempotente)'
-        : 'API retornou token diferente (tokens distintos por chamada)',
-    },
-  };
-});
-
-// ── Helper: montar payload de pagamento crédito ───────────────────────────────
-function buildCreditPayload(numberToken, amountCents, options = {}) {
-  const orderId = `homolog-test-${Date.now()}`;
-  return {
-    seller_id: billing.sellerId,
-    amount: amountCents,
-    currency: 'BRL',
-    order: {
-      order_id: orderId,
-      sales_tax: 0,
-      product_type: 'service',
-    },
-    customer: {
-      customer_id: 'homolog-customer-001',
-      first_name: 'Teste',
-      last_name: 'Homolog',
-      email: 'homolog@ruptur.cloud',
-      document_type: 'CPF',
-      document_number: '12345678909',
-      billing_address: {
-        street: 'Rua Homolog',
-        number: '123',
-        city: 'Sao Paulo',
-        state: 'SP',
-        country: 'BR',
-        postal_code: '01310-100',
-      },
-    },
-    credit: {
-      delayed: false,
-      save_card_data: false,
-      transaction_type: options.transactionType || 'FULL_PAYMENT',
-      number_installments: options.installments || 1,
-      card: {
-        number_token: numberToken,
-        cardholder_name: options.holderName || 'TESTE HOMOLOG',
-        security_code: '123',
-        brand: 'Mastercard',
-        expiration_month: '12',
-        expiration_year: '2026',
-      },
-    },
-  };
-}
-
-// ════════════════════════════════════════════════════════════════════════════════
-//  SHEET 3 — Credit Payment
-// ════════════════════════════════════════════════════════════════════════════════
-
-// Verificar se temos o number_token antes de prosseguir
-if (!state.numberToken) {
-  console.log('\n⚠️  numberToken não disponível — pulando testes de pagamento (tokenização falhou)');
-  results.push({
-    sheet: '3-CreditPayment',
-    test_id: 'payment_credit_approved',
-    description: 'Pagamento crédito aprovado — PULADO por falta de numberToken',
     status: 'SKIP',
-    request: null,
-    response: null,
-    error: 'Tokenização anterior falhou, numberToken indisponível',
-    executed_at: new Date().toISOString(),
+    request: { note: 'Tokenização não utilizada — card.number enviado direto no pagamento' },
+    response: { note: 'Confirmar com a Getnet o endpoint de number-token caso o checklist exija' },
+  };
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+//  SHEET 3 — Credit Payment (V2 Global: POST /dpm/payments-gwproxy/v2/payments)
+// ════════════════════════════════════════════════════════════════════════════════
+
+const APPROVED_CARD = { number: HOMOLOG_CARDS.approved, expMonth: '12', expYear: '26', holderName: 'TESTE HOMOLOG', cvv: '123' };
+const DENIED_CARD   = { number: HOMOLOG_CARDS.denied,   expMonth: '12', expYear: '26', holderName: 'CARTAO NEGADO', cvv: '123' };
+const V2_ENDPOINT   = `${billing.baseUrl}/dpm/payments-gwproxy/v2/payments`;
+
+await runTest('3-CreditPayment', 'payment_credit_approved', 'Pagamento R$ 1,00 com cartão aprovado', async () => {
+  const response = await billing.createV2GlobalCreditPayment({
+    amountCents: 100,
+    card: APPROVED_CARD,
+    customerId: 'homolog-customer-001',
+    transactionType: 'FULL',
   });
-} else {
+  state.approvedPaymentId = response.payment_id;
+  const passed = ['APPROVED', 'AUTHORIZED', 'CONFIRMED'].includes(response.status) || !!response.payment_id;
+  return {
+    status: passed ? 'PASS' : 'FAIL',
+    request: { endpoint: V2_ENDPOINT, method: 'POST', amount_cents: 100, card: `${HOMOLOG_CARDS.approved.slice(0, 6)}...${HOMOLOG_CARDS.approved.slice(-4)}`, transaction_type: 'FULL', installments: 1 },
+    response: { payment_id: response.payment_id, status: response.status, status_detail: response.status_detail },
+  };
+});
 
-  await runTest('3-CreditPayment', 'payment_credit_approved', 'Pagamento R$ 1,00 com cartão aprovado', async () => {
-    const payload = buildCreditPayload(state.numberToken, 100, { transactionType: 'FULL_PAYMENT' });
-
-    const request = {
-      endpoint: `${billing.baseUrl}/v1/payments/credit`,
-      method: 'POST',
-      amount_cents: 100,
-      card: `${HOMOLOG_CARDS.approved.slice(0, 6)}...${HOMOLOG_CARDS.approved.slice(-4)}`,
-      transaction_type: 'FULL_PAYMENT',
-      installments: 1,
-      order_id: payload.order.order_id,
-    };
-
-    const response = await billing.apiFetch('/v1/payments/credit', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-
-    state.approvedPaymentId = response.payment_id;
-
-    const passed = ['APPROVED', 'AUTHORIZED'].includes(response.status) || response.payment_id;
+await runTest('3-CreditPayment', 'payment_credit_denied', 'Pagamento R$ 1,00 com cartão negado', async () => {
+  const request = { endpoint: V2_ENDPOINT, method: 'POST', amount_cents: 100, card: `${HOMOLOG_CARDS.denied.slice(0, 6)}...${HOMOLOG_CARDS.denied.slice(-4)}`, expected_outcome: 'DENIED/REJECTED' };
+  try {
+    const response = await billing.createV2GlobalCreditPayment({ amountCents: 100, card: DENIED_CARD, customerId: 'homolog-customer-002', transactionType: 'FULL' });
+    const isDenied = ['DENIED', 'REJECTED', 'REFUSED', 'NOT_AUTHORIZED'].includes(response.status);
     return {
-      status: passed ? 'PASS' : 'FAIL',
+      status: isDenied ? 'PASS' : 'WARN',
       request,
-      response: {
-        payment_id: response.payment_id,
-        status: response.status,
-        status_detail: response.status_detail,
-        credit: response.credit,
-      },
+      response: { payment_id: response.payment_id, status: response.status, status_detail: response.status_detail, note: isDenied ? 'Cartão negado como esperado' : `Status inesperado: ${response.status} (esperava DENIED/REJECTED)` },
     };
+  } catch (err) {
+    // Erro 4xx ao negar o cartão é comportamento esperado
+    return { status: 'PASS', request, response: { error_message: err.message, body: err.body || null, note: 'Erro capturado na negação — esperado para cartão negado' } };
+  }
+});
+
+await runTest('3-CreditPayment', 'payment_installments', 'Pagamento R$ 3,00 em 3x sem juros', async () => {
+  const response = await billing.createV2GlobalCreditPayment({
+    amountCents: 300,
+    card: APPROVED_CARD,
+    customerId: 'homolog-customer-001',
+    installments: 3,
+    transactionType: 'INSTALL_NO_INTEREST',
   });
-
-  await runTest('3-CreditPayment', 'payment_credit_denied', 'Pagamento R$ 1,00 com cartão negado', async () => {
-    // Tokenizar cartão negado
-    let deniedToken = null;
-    try {
-      const t = await billing.tokenizeCard(HOMOLOG_CARDS.denied, 'homolog-customer-002');
-      deniedToken = t.number_token;
-    } catch (_err) {
-      // Tokenização do cartão negado pode falhar — pular este sub-teste
-    }
-
-    if (!deniedToken) {
-      return {
-        status: 'SKIP',
-        request: { note: 'Tokenização do cartão negado falhou — teste não executado' },
-        response: null,
-      };
-    }
-
-    const payload = buildCreditPayload(deniedToken, 100, { holderName: 'CARTAO NEGADO' });
-
-    const request = {
-      endpoint: `${billing.baseUrl}/v1/payments/credit`,
-      method: 'POST',
-      amount_cents: 100,
-      card: `${HOMOLOG_CARDS.denied.slice(0, 6)}...${HOMOLOG_CARDS.denied.slice(-4)}`,
-      expected_outcome: 'DENIED/REJECTED',
-    };
-
-    try {
-      const response = await billing.apiFetch('/v1/payments/credit', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-
-      const isDenied = ['DENIED', 'REJECTED', 'REFUSED', 'NOT_AUTHORIZED'].includes(response.status);
-      return {
-        status: isDenied ? 'PASS' : 'WARN',
-        request,
-        response: {
-          payment_id: response.payment_id,
-          status: response.status,
-          status_detail: response.status_detail,
-          note: isDenied
-            ? 'Cartão negado como esperado'
-            : `Status inesperado: ${response.status} (esperava DENIED/REJECTED)`,
-        },
-      };
-    } catch (err) {
-      // Erro HTTP 4xx/5xx ao negar o cartão é o comportamento esperado
-      return {
-        status: 'PASS',
-        request,
-        response: {
-          error_message: err.message,
-          body: err.body || null,
-          note: 'Erro capturado na negação — comportamento esperado para cartão negado',
-        },
-      };
-    }
-  });
-
-  await runTest('3-CreditPayment', 'payment_installments', 'Pagamento R$ 3,00 em 3x sem juros', async () => {
-    const payload = buildCreditPayload(state.numberToken, 300, {
-      installments: 3,
-      transactionType: 'INSTALL_NO_INTEREST',
-    });
-
-    const request = {
-      endpoint: `${billing.baseUrl}/v1/payments/credit`,
-      method: 'POST',
-      amount_cents: 300,
-      transaction_type: 'INSTALL_NO_INTEREST',
-      installments: 3,
-      installment_value_cents: 100,
-      order_id: payload.order.order_id,
-    };
-
-    const response = await billing.apiFetch('/v1/payments/credit', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-
-    const passed = ['APPROVED', 'AUTHORIZED'].includes(response.status) || response.payment_id;
-    return {
-      status: passed ? 'PASS' : 'FAIL',
-      request,
-      response: {
-        payment_id: response.payment_id,
-        status: response.status,
-        status_detail: response.status_detail,
-        credit: response.credit,
-      },
-    };
-  });
-
-}
+  const passed = ['APPROVED', 'AUTHORIZED', 'CONFIRMED'].includes(response.status) || !!response.payment_id;
+  return {
+    status: passed ? 'PASS' : 'FAIL',
+    request: { endpoint: V2_ENDPOINT, method: 'POST', amount_cents: 300, transaction_type: 'INSTALL_NO_INTEREST', installments: 3, installment_value_cents: 100 },
+    response: { payment_id: response.payment_id, status: response.status, status_detail: response.status_detail },
+  };
+});
 
 // ════════════════════════════════════════════════════════════════════════════════
 //  SHEET 5 — Reversal D+0

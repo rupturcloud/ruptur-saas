@@ -141,17 +141,31 @@ class BillingService {
       return this._token;
     }
 
-    // A Getnet BR rejeita o prefixo "cid_" no Basic Auth (máx. 36 chars = UUID puro).
-    const cleanClientId = this.clientId?.replace(/^cid_/, '') || this.clientId;
-    const credentials = Buffer.from(`${cleanClientId}:${this.clientSecret}`).toString('base64');
+    // V2 Global (homolog/globalgetnet): client_id MANTÉM o prefixo "cid_"/"CID"
+    //   (confirmado pela Getnet/Gabriela em 2026-06 — "inicia-se com CID mesmo").
+    // Getnet BR (sandbox/prod): rejeita "cid_" no Basic Auth (máx. 36 chars = UUID puro).
+    const basicClientId = this.useHomolog
+      ? this.clientId
+      : (this.clientId?.replace(/^cid_/, '') || this.clientId);
+    const credentials = Buffer.from(`${basicClientId}:${this.clientSecret}`).toString('base64');
 
-    const res = await fetch(`${this.baseUrl}/auth/oauth/v2/token`, {
+    // Caminho do token difere entre V2 Global e Getnet BR.
+    //   V2 Global (homolog): /authentication/oauth2/access_token (URL correta da Getnet/Gabriela 2026-06)
+    //   Getnet BR:           /auth/oauth/v2/token
+    const tokenPath = this.useHomolog
+      ? '/authentication/oauth2/access_token'
+      : '/auth/oauth/v2/token';
+
+    const res = await fetch(`${this.baseUrl}${tokenPath}`, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${credentials}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: 'scope=oob&grant_type=client_credentials',
+      // V2 Global (homolog) rejeita scope ("invalid_scope"); Getnet BR exige scope=oob.
+      body: this.useHomolog
+        ? 'grant_type=client_credentials'
+        : 'scope=oob&grant_type=client_credentials',
     });
 
     if (!res.ok) {
@@ -178,6 +192,7 @@ class BillingService {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
         'seller_id': this.sellerId,
+        'x-seller-id': this.sellerId, // V2 Global (homolog/globalgetnet) exige x-seller-id
         ...options.headers,
       },
     });
@@ -191,7 +206,7 @@ class BillingService {
     }
 
     if (!res.ok) {
-      const error = new Error(data.message || data.details?.[0]?.description || `Getnet API error: ${res.status}`);
+      const error = new Error(data.message || data.details?.[0]?.description_detail || data.details?.[0]?.description || `Getnet API error: ${res.status}`);
       error.status = res.status;
       error.body = data;
       throw error;
@@ -1638,6 +1653,79 @@ class BillingService {
     console.log('[Billing:Getnet] Pré-autorização capturada', { paymentId });
 
     return result;
+  }
+
+  // ========================================================================
+  //  V2 Global (Santander/globalgetnet) — Pagamento de crédito
+  //  Estrutura validada contra api.pre.globalgetnet.com
+  //  Ref: docs/GETNET-V2-GLOBAL-FINDINGS.md
+  // ========================================================================
+
+  /**
+   * Criar pagamento de crédito no formato V2 Global.
+   * Difere da Getnet BR: body aninhado em `data:{}`, header x-seller-id,
+   * expiration_year com 2 dígitos, sem objeto `customer` (só customer_id).
+   * Aceita card.number (PAN) OU card.numberToken.
+   * @param {object} p
+   * @param {number} p.amountCents          - valor em centavos
+   * @param {object} p.card                 - { number|numberToken, expMonth, expYear(2díg), holderName, cvv }
+   * @param {string} [p.customerId]
+   * @param {number} [p.installments=1]
+   * @param {string} [p.transactionType='FULL'] - 'FULL' | 'INSTALL_NO_INTEREST' | 'INSTALL_WITH_INTEREST' | 'PRE_AUTH'
+   * @param {string} [p.orderId]
+   * @param {string} [p.deviceIp='177.10.10.10']
+   * @returns {object} resposta da Getnet (payment_id, status, ...)
+   */
+  async createV2GlobalCreditPayment({
+    amountCents,
+    card = {},
+    customerId = 'ruptur-customer',
+    installments = 1,
+    transactionType = 'FULL',
+    orderId,
+    deviceIp = '177.10.10.10',
+  } = {}) {
+    const uuid = () =>
+      globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    const cardNode = card.numberToken
+      ? { number_token: card.numberToken }
+      : { number: card.number };
+
+    const payload = {
+      idempotency_key: uuid(),
+      request_id: uuid(),
+      order_id: orderId || `ruptur-${Date.now()}`,
+      data: {
+        amount: amountCents,
+        currency: 'BRL',
+        customer_id: customerId,
+        payment: {
+          payment_method: 'CREDIT',
+          save_card_data: false,
+          transaction_type: transactionType,
+          number_installments: installments,
+          soft_descriptor: 'RUPTUR',
+          card: {
+            ...cardNode,
+            expiration_month: card.expMonth,
+            expiration_year: card.expYear, // 2 dígitos (ex: "26")
+            cardholder_name: card.holderName,
+            security_code: card.cvv,
+          },
+        },
+        additional_data: {
+          device: { ip_address: deviceIp, device_id: uuid(), finger_print: `ruptur-${uuid()}` },
+        },
+      },
+    };
+
+    return this.apiFetch('/dpm/payments-gwproxy/v2/payments', {
+      method: 'POST',
+      // x-transaction-channel-entry: aceito pelo gateway; valor 'ECOMMERCE' a confirmar com Getnet.
+      headers: { 'x-transaction-channel-entry': 'ECOMMERCE' },
+      body: JSON.stringify(payload),
+    });
   }
 }
 
