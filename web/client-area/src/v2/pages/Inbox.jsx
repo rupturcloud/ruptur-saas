@@ -472,10 +472,11 @@ function normalizeTags(raw) {
 }
 
 /** Monta o objeto de filtros para /chat/find a partir do estado da UI */
-function buildFilters({ tab, label, groupsOnly, userId }) {
+function buildFilters({ tab, label, tag, groupsOnly, userId }) {
   const f = {};
   if (groupsOnly) f.wa_isGroup = true;
   if (label) f.wa_label = label;
+  if (tag) f.lead_tags = tag;
   if (tab === 'mine' && userId) f.lead_assignedAttendant_id = userId;
   else if (tab === 'unassigned') f.lead_assignedAttendant_id = '';
   return f;
@@ -544,6 +545,7 @@ export default function Inbox() {
   const [tab, setTab] = useState('all');          // all | mine | unassigned
   const [labels, setLabels] = useState([]);
   const [activeLabel, setActiveLabel] = useState(null);
+  const [activeTag, setActiveTag] = useState('');
   const [groupsOnly, setGroupsOnly] = useState(false);
 
   // Conversas
@@ -602,13 +604,11 @@ export default function Inbox() {
     setActiveChat(null);
     setMessages([]);
     setActiveLabel(null);
+    setActiveTag('');
   }, []);
 
   const loadLabels = useCallback(async (key) => {
-    if (key === 'all') {
-      setLabels([]);
-      return;
-    }
+    if (!key) return;
     try {
       const { labels: rows = [] } = await inboxApi.getLabels(key);
       setLabels(Array.isArray(rows) ? rows : []);
@@ -622,30 +622,19 @@ export default function Inbox() {
     if (!instanceKey) return;
     if (!silent) { setChatsLoading(true); setInstanceExpired(false); }
     try {
-      const filters = buildFilters({ tab, label: activeLabel, groupsOnly, userId });
-      let rows = [];
-
-      if (instanceKey === 'all') {
-        const activeInsts = instances.filter(i => i.key !== 'all' && i.status === 'connected');
-        if (activeInsts.length === 0) {
-          setChats([]); setUnread(0); return;
-        }
-        const promises = activeInsts.map(i =>
-          inboxApi.findChats(i.key || i.id, { filters, limit: 40 })
-            .then(res => (res.chats || []).map(chat => ({ ...chat, _sourceInstance: i })))
-            .catch(() => [])
-        );
-        const results = await Promise.all(promises);
-        rows = results.flat().sort((a, b) => (b.wa_lastMsgTimestamp || 0) - (a.wa_lastMsgTimestamp || 0));
-      } else {
-        const res = await inboxApi.findChats(instanceKey, { filters, limit: 60 });
-        if (res.freeTrialExpired || res.error === 'INSTANCE_EXPIRED') {
-          setInstanceExpired(true); setChats([]); setUnread(0); return;
-        }
-        rows = res.chats || [];
-        const i = instances.find(inst => (inst.key || inst.id) === instanceKey);
-        if (i) rows = rows.map(chat => ({ ...chat, _sourceInstance: i }));
+      const filters = buildFilters({ tab, label: activeLabel, tag: activeTag, groupsOnly, userId });
+      
+      const res = await inboxApi.findChats(instanceKey, { filters, limit: 60 });
+      if (res.freeTrialExpired || res.error === 'INSTANCE_EXPIRED') {
+        setInstanceExpired(true); setChats([]); setUnread(0); return;
       }
+      
+      let rows = res.chats || [];
+      rows = rows.map(chat => {
+        const sourceKey = chat._sourceInstance || instanceKey;
+        const i = instances.find(inst => (inst.key || inst.id) === sourceKey);
+        return { ...chat, _sourceInstance: i || sourceKey };
+      });
 
       setChats(rows);
       setUnread(rows.reduce((s, c) => s + (c.wa_unreadCount || 0), 0));
@@ -655,7 +644,7 @@ export default function Inbox() {
     } finally {
       if (!silent) setChatsLoading(false);
     }
-  }, [instanceKey, tab, activeLabel, groupsOnly, userId, setUnread, instances]);
+  }, [instanceKey, tab, activeLabel, activeTag, groupsOnly, userId, setUnread, instances]);
 
   const loadMessages = useCallback(async (chat, silent) => {
     if (!chat) return;
@@ -915,6 +904,16 @@ export default function Inbox() {
                 </div>
               );
             })}
+          </div>
+
+          <div className="ibx-rail-section">
+            <div className="ibx-rail-title">Tags</div>
+            <div className="ibx-search" style={{ marginTop: 8, marginBottom: 8 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ color: 'var(--ink-400)', flexShrink: 0 }}>
+                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" />
+              </svg>
+              <input type="text" placeholder="Filtrar por tag..." value={activeTag} onChange={e => setActiveTag(e.target.value)} />
+            </div>
           </div>
 
           <div className={`ibx-live${sseLive ? ' on' : ''}`}>

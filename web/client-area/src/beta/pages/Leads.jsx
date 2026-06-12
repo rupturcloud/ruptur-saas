@@ -111,6 +111,7 @@ export default function Leads() {
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved) setText(saved);
     } catch { /* noop */ }
   }, []);

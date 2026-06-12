@@ -12,7 +12,7 @@
  * (mesmo isolamento por tenant do Inbox).
  */
 
-import { getAdapterForInstance } from './routes-inbox.mjs';
+import { getAdapterForInstance, tenantProviderIds } from './routes-inbox.mjs';
 import { createCrmManager, getCrmManager } from '../modules/crm/index.js';
 
 function crm(supabase) {
@@ -65,24 +65,27 @@ export async function handleGetPipeline(req, res, json, supabase) {
 
     // Buscar chats (cards) da UAZAPI. Só conversas individuais (sem grupos).
     if (instanceKey === 'all') {
-      const { data: instances } = await supabase
-        .from('uazapi_accounts')
-        .select('key')
-        .eq('tenant_id', tenantId)
-        .eq('status', 'connected');
+      const tpIds = await tenantProviderIds(supabase, tenantId);
+      if (tpIds.length > 0) {
+        const { data: instances } = await supabase
+          .from('instance_registry')
+          .select('remote_instance_id')
+          .in('tenant_provider_id', tpIds)
+          .eq('status', 'connected');
 
-      const promises = (instances || []).map(async (inst) => {
-        try {
-          const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, inst.key);
-          const result = await adapter.findChats(resolved.token, { operator: 'AND', sort: 'lead_kanbanOrder', limit, offset: 0, wa_isGroup: false });
-          const instChats = result.chats || result || [];
-          return instChats.map(c => ({ ...c, _sourceInstance: inst.key }));
-        } catch (e) {
-          return [];
-        }
-      });
-      const results = await Promise.all(promises);
-      chats = results.flat();
+        const promises = (instances || []).map(async (inst) => {
+          try {
+            const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, inst.remote_instance_id);
+            const result = await adapter.findChats(resolved.token, { operator: 'AND', sort: 'lead_kanbanOrder', limit, offset: 0, wa_isGroup: false });
+            const instChats = result.chats || result || [];
+            return instChats.map(c => ({ ...c, _sourceInstance: inst.remote_instance_id }));
+          } catch (e) {
+            return [];
+          }
+        });
+        const results = await Promise.all(promises);
+        chats = results.flat();
+      }
     } else {
       const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, instanceKey);
       const result = await adapter.findChats(resolved.token, {

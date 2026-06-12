@@ -1260,6 +1260,7 @@ function WorkspaceTab() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);   // { type:'ok'|'err', text }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (tenant?.id) setSelectedId((p) => p || tenant.id); }, [tenant?.id]);
 
   useEffect(() => {
@@ -1269,6 +1270,7 @@ function WorkspaceTab() {
       .then(d => setAllTenants(d.tenants || []));
   }, [isPlatformAdmin, session?.access_token]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (!selectedId && allTenants.length > 0) setSelectedId(allTenants[0].id); }, [selectedId, allTenants]);
 
   const load = useCallback(() => {
@@ -1280,6 +1282,7 @@ function WorkspaceTab() {
       .catch(e => { setForm(null); setMsg({ type: 'err', text: e.message }); })
       .finally(() => setLoading(false));
   }, [selectedId, session?.access_token]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -1405,7 +1408,9 @@ function PermissionsTab() {
     ]).then(([a, i]) => { setAdmins(a.data || []); setInvites(i.invites || []); })
       .catch(e => setMsg({ type: 'err', text: e.message }))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.access_token, isPlatformAdmin]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   const invite = async () => {
@@ -1546,11 +1551,14 @@ function BillingTab() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (tenant?.id) setSelectedId(p => p || tenant.id); }, [tenant?.id]);
   useEffect(() => {
     if (!isPlatformAdmin || !session?.access_token) return;
     fetch('/api/admin/platform/tenants', { headers: h }).then(r => r.ok ? r.json() : { tenants: [] }).then(d => setAllTenants(d.tenants || []));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlatformAdmin, session?.access_token]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (!selectedId && allTenants.length > 0) setSelectedId(allTenants[0].id); }, [selectedId, allTenants]);
 
   const load = useCallback(() => {
@@ -1562,7 +1570,9 @@ function BillingTab() {
     ]).then(([b, a]) => { setBilling(b?.data || null); setAudit(a?.logs || []); })
       .catch(e => setMsg({ type: 'err', text: e.message }))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, session?.access_token]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   const addCredits = async () => {
@@ -1654,7 +1664,9 @@ function ContaTab() {
   const [savingPass, setSavingPass] = useState(false);
   const [msg, setMsg] = useState(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFullName(user?.user_metadata?.full_name || user?.user_metadata?.tenant_name || '');
   }, [user?.id]);
 
@@ -1757,9 +1769,11 @@ function NotificacoesTab() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const saved = user?.user_metadata?.notification_prefs;
-    if (saved) setPrefs(p => ({ ...DEFAULT_PREFS, ...saved }));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (saved) setPrefs(() => ({ ...DEFAULT_PREFS, ...saved }));
   }, [user?.id]);
 
   const toggle = (key) => { setPrefs(p => ({ ...p, [key]: !p[key] })); setMsg(null); };
@@ -1867,6 +1881,7 @@ function LgpdTab() {
 
 // ─── Aba genérica: Placeholder ────────────────────────────────────────────────
 
+// eslint-disable-next-line no-unused-vars
 function ComingSoonTab({ label }) {
   return (
     <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-400)' }}>

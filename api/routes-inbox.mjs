@@ -44,7 +44,7 @@ import { createUazapiAdapter } from '../modules/provider-adapter/uazapi-adapter.
 // ─── Helper: ids de tenant_providers de um tenant ──────────────────────────────
 // IMPORTANTE: instance_registry NÃO tem coluna tenant_id. O vínculo com o tenant é
 // instance_registry.tenant_provider_id → tenant_providers.id (que tem tenant_id).
-async function tenantProviderIds(supabase, tenantId) {
+export async function tenantProviderIds(supabase, tenantId) {
   const { data, error } = await supabase
     .from('tenant_providers')
     .select('id')
@@ -172,9 +172,6 @@ export async function handleFindChats(req, res, json, supabase) {
   if (!instanceKey) return json(res, 400, { error: 'instanceKey obrigatório' }, req);
 
   try {
-    const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, instanceKey);
-
-    // Spec /chat/find: payload completo com operador AND, sort e paginação
     const payload = {
       operator: 'AND',
       sort,
@@ -183,14 +180,54 @@ export async function handleFindChats(req, res, json, supabase) {
       ...filters,  // wa_isGroup, wa_archived, lead_isTicketOpen, lead_assignedAttendant_id, etc.
     };
 
-    const result = await adapter.findChats(resolved.token, payload);
+    if (instanceKey === 'all') {
+      const tpIds = await tenantProviderIds(supabase, tenantId);
+      if (!tpIds.length) return json(res, 200, { chats: [], pagination: {}, totalStats: {}, instanceKey }, req);
 
-    return json(res, 200, {
-      chats: result.chats || [],
-      pagination: result.pagination || {},
-      totalStats: result.totalChatsStats || {},
-      instanceKey,
-    }, req);
+      const { data: instances } = await supabase
+        .from('instance_registry')
+        .select('remote_instance_id')
+        .in('tenant_provider_id', tpIds)
+        .eq('status', 'connected');
+
+      const promises = (instances || []).map(async (inst) => {
+        try {
+          const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, inst.remote_instance_id);
+          const result = await adapter.findChats(resolved.token, payload);
+          const instChats = result.chats || [];
+          return instChats.map(c => ({ ...c, _sourceInstance: inst.remote_instance_id }));
+        } catch (e) {
+          return [];
+        }
+      });
+      const results = await Promise.all(promises);
+      const allChats = results.flat();
+
+      if (sort === '-wa_lastMsgTimestamp') {
+        allChats.sort((a, b) => (b.wa_lastMsgTimestamp || 0) - (a.wa_lastMsgTimestamp || 0));
+      } else if (sort === 'wa_lastMsgTimestamp') {
+        allChats.sort((a, b) => (a.wa_lastMsgTimestamp || 0) - (b.wa_lastMsgTimestamp || 0));
+      }
+
+      const pagedChats = allChats.slice(offset, offset + limit);
+
+      return json(res, 200, {
+        chats: pagedChats,
+        pagination: { hasMore: (offset + limit) < allChats.length, total: allChats.length },
+        totalStats: {},
+        instanceKey,
+      }, req);
+    } else {
+      const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, instanceKey);
+      const result = await adapter.findChats(resolved.token, payload);
+
+      return json(res, 200, {
+        chats: (result.chats || []).map(c => ({ ...c, _sourceInstance: instanceKey })),
+        pagination: result.pagination || {},
+        totalStats: result.totalChatsStats || {},
+        instanceKey,
+      }, req);
+    }
   } catch (e) {
     return json(res, e.message?.includes('não encontrada') ? 404 : 500, { error: e.message }, req);
   }
@@ -347,10 +384,42 @@ export async function handleGetLabels(req, res, json, supabase) {
   if (!instanceKey) return json(res, 400, { error: 'instanceKey obrigatório' }, req);
 
   try {
-    const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, instanceKey);
-    // Spec /chat/labels: GET com header token
-    const result = await adapter.instanceRequest(resolved.token, '/chat/labels', {}, 'Failed to get labels');
-    return json(res, 200, { labels: Array.isArray(result) ? result : (result.labels || []) }, req);
+    if (instanceKey === 'all') {
+      const tpIds = await tenantProviderIds(supabase, tenantId);
+      if (!tpIds.length) return json(res, 200, { labels: [] }, req);
+
+      const { data: instances } = await supabase
+        .from('instance_registry')
+        .select('remote_instance_id')
+        .in('tenant_provider_id', tpIds)
+        .eq('status', 'connected');
+
+      const promises = (instances || []).map(async (inst) => {
+        try {
+          const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, inst.remote_instance_id);
+          const result = await adapter.instanceRequest(resolved.token, '/chat/labels', {}, 'Failed to get labels');
+          return Array.isArray(result) ? result : (result.labels || []);
+        } catch (e) {
+          return [];
+        }
+      });
+      const results = await Promise.all(promises);
+      const allLabels = results.flat();
+      
+      const uniqueLabels = [];
+      const seenNames = new Set();
+      for (const lbl of allLabels) {
+        if (!seenNames.has(lbl.name)) {
+          seenNames.add(lbl.name);
+          uniqueLabels.push(lbl);
+        }
+      }
+      return json(res, 200, { labels: uniqueLabels }, req);
+    } else {
+      const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, instanceKey);
+      const result = await adapter.instanceRequest(resolved.token, '/chat/labels', {}, 'Failed to get labels');
+      return json(res, 200, { labels: Array.isArray(result) ? result : (result.labels || []) }, req);
+    }
   } catch (e) {
     return json(res, 500, { error: e.message }, req);
   }
@@ -485,12 +554,37 @@ export async function handleGetGroups(req, res, json, supabase) {
   if (!instanceKey) return json(res, 400, { error: 'instanceKey obrigatório' }, req);
 
   try {
-    const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, instanceKey);
-    const result = await adapter.instanceRequest(resolved.token, '/group/list', {
-      method: 'POST',
-      body: {},
-    }, 'Failed to list groups');
-    return json(res, 200, { groups: Array.isArray(result) ? result : (result.groups || []) }, req);
+    if (instanceKey === 'all') {
+      const tpIds = await tenantProviderIds(supabase, tenantId);
+      if (!tpIds.length) return json(res, 200, { groups: [] }, req);
+
+      const { data: instances } = await supabase
+        .from('instance_registry')
+        .select('remote_instance_id')
+        .in('tenant_provider_id', tpIds)
+        .eq('status', 'connected');
+
+      const promises = (instances || []).map(async (inst) => {
+        try {
+          const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, inst.remote_instance_id);
+          const result = await adapter.instanceRequest(resolved.token, '/group/list', { method: 'POST', body: {} }, 'Failed to list groups');
+          const groups = Array.isArray(result) ? result : (result.groups || []);
+          return groups.map(g => ({ ...g, _sourceInstance: inst.remote_instance_id }));
+        } catch (e) {
+          return [];
+        }
+      });
+      const results = await Promise.all(promises);
+      return json(res, 200, { groups: results.flat() }, req);
+    } else {
+      const { adapter, resolved } = await getAdapterForInstance(supabase, tenantId, instanceKey);
+      const result = await adapter.instanceRequest(resolved.token, '/group/list', {
+        method: 'POST',
+        body: {},
+      }, 'Failed to list groups');
+      const groups = Array.isArray(result) ? result : (result.groups || []);
+      return json(res, 200, { groups: groups.map(g => ({ ...g, _sourceInstance: instanceKey })) }, req);
+    }
   } catch (e) {
     return json(res, 500, { error: e.message }, req);
   }
