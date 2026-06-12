@@ -237,6 +237,7 @@ export class CampaignManager {
         dispatchMode: campaignData.dispatchMode === 'native' ? 'native' : 'legacy',
         delayMin: campaignData.delayMin ?? 3,
         delayMax: campaignData.delayMax ?? 8,
+        tags: campaignData.tags || [],
       },
       content: {
         message: campaignData.message,
@@ -483,6 +484,20 @@ export class CampaignManager {
       campaignId: campaign.id,
       description: `Reserva de campanha nativa (${total} envios)`,
     });
+
+    // Automação de CRM: Atribuição de Etiquetas automáticas aos destinatários
+    if (campaign.settings?.tags && campaign.settings.tags.length > 0) {
+      const uniqueNumbers = [...new Set(recipients.map(r => r.phone))];
+      try {
+        const adapter = this._adapterForSender(sender);
+        await Promise.allSettled(uniqueNumbers.map(phone => 
+          adapter.editLead(sender.token, phone, { lead_tags: campaign.settings.tags })
+            .catch(e => console.error(`[Campaign] Erro ao aplicar tags no CRM para ${phone}:`, e.message))
+        ));
+      } catch (e) {
+        console.error(`[Campaign] Erro global na automação de tags:`, e.message);
+      }
+    }
 
     // Agendamento: scheduled_for em minutos a partir de agora (0 = imediato).
     let scheduledFor = 0;

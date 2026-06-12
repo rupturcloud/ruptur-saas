@@ -69,7 +69,7 @@ const STATUS_TONE = {
 
 const EMPTY_FORM = {
   name: '', instanceKey: '', message: '', mediaType: 'text', mediaUrl: '',
-  buttons: [], footerText: '', numbersText: '', delayMin: 3, delayMax: 8,
+  buttons: [], footerText: '', numbersText: '', tagsText: '', delayMin: 3, delayMax: 8,
   scheduleType: 'immediate', scheduledAt: '',
 };
 
@@ -128,6 +128,7 @@ export default function Campaigns() {
     delayMax: Number(form.delayMax) || 8,
     scheduleType: form.scheduleType,
     scheduledAt: form.scheduleType === 'scheduled' && form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
+    tags: form.tagsText ? form.tagsText.split(',').map(t => t.trim()).filter(Boolean) : [],
   });
 
   const validate = () => {
@@ -317,6 +318,12 @@ function Composer({ form, upd, instances, numbers }) {
             onChange={(e) => upd({ numbersText: e.target.value })}
             placeholder={'5511999999999\n5511888888888'} />
           <div className="cmp-hint">{numbers.length} destinatário(s)</div>
+        </div>
+
+        <div className="cmp-field">
+          <span className="cmp-label">Etiquetas automáticas no CRM (opcional, separadas por vírgula)</span>
+          <Input value={form.tagsText} onChange={(e) => upd({ tagsText: e.target.value })} placeholder="ex: blackfriday, promo_junho" />
+          <div className="cmp-hint">As etiquetas serão aplicadas a cada destinatário ao lançar a campanha</div>
         </div>
 
         <div className="cmp-field">
