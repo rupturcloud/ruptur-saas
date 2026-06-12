@@ -5,14 +5,11 @@ import { defineConfig, devices } from '@playwright/test';
  * E2E tests for Ruptur SaaS Payment Workflow
  */
 
-const WARMUP_HOST = process.env.WARMUP_RUNTIME_HOST || '127.0.0.1';
-const WARMUP_PORT = process.env.WARMUP_RUNTIME_PORT || '4173';
-const WARMUP_BASE_URL =
-  process.env.WARMUP_BASE_URL ||
-  process.env.BASE_URL ||
-  `http://${WARMUP_HOST}:${WARMUP_PORT}`;
+const FRONTEND_HOST = process.env.FRONTEND_HOST || 'localhost';
+const FRONTEND_PORT = process.env.FRONTEND_PORT || '5173';
+const FRONTEND_BASE_URL = `http://${FRONTEND_HOST}:${FRONTEND_PORT}`;
 
-const API_HOST = process.env.API_HOST || '127.0.0.1';
+const API_HOST = process.env.API_HOST || 'localhost';
 const API_PORT = process.env.PORT_API || '3001';
 const API_BASE_URL = process.env.API_BASE_URL || `http://${API_HOST}:${API_PORT}`;
 
@@ -29,7 +26,7 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: WARMUP_BASE_URL,
+    baseURL: FRONTEND_BASE_URL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -37,10 +34,10 @@ export default defineConfig({
 
   webServer: [
     {
-      command: `WARMUP_RUNTIME_HOST=${WARMUP_HOST} WARMUP_RUNTIME_PORT=${WARMUP_PORT} npm start`,
-      url: `${WARMUP_BASE_URL}/api/local/health`,
+      command: `npm --prefix web/client-area run dev`,
+      url: `${FRONTEND_BASE_URL}`,
       reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
+      timeout: 120_000,
     },
     {
       command: `API_HOST=${API_HOST} PORT_API=${API_PORT} GETNET_WEBHOOK_SECRET=${process.env.GETNET_WEBHOOK_SECRET || 'playwright-getnet-secret'} node api/gateway.mjs`,
