@@ -13,6 +13,15 @@ coverage/
 
 # Configurações e sessões de agentes Claude — nunca commitar
 .claude/
+.agent/
+.agents/
+.antigravity/
+.cursor/
 
 # dist-client (artefato de build, não código-fonte)
 dist-client/
+
+# Arquivos do sistema operacional e diretórios legados
+.DS_Store
+**/.DS_Store
+ruptur-main/
