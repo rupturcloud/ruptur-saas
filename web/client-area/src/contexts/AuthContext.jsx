@@ -288,21 +288,14 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.email === 'admin@ruptur.cloud' || tenant?.userRole === 'owner';
   const tenantId = tenant?.id ?? null;
 
-  // Expõe { token, tenantId } no escopo global para os clients HTTP que vivem
-  // fora da árvore React: httpClient.js, inbox.api.js, admin.api.js e o SSE do
-  // Inbox leem window.__ruptur.auth. Esse contrato já está DOCUMENTADO nesses
-  // arquivos ("setado por AuthContext"), mas nunca era cumprido — sem ele o
-  // gateway recebe requests sem Authorization: Bearer e responde 401.
-  //
-  // A corrida de timing (efeito do pai roda após os filhos) é tratada no
-  // inbox.api.js, que usa o localStorage 'ruptur_active_tenant' como fallback
-  // síncrono do tenantId. Aqui mantemos o efeito (sem mutar no render).
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+  // Expõe { token, tenantId } no escopo global de forma síncrona,
+  // para que os requests que disparam em useEffects de filhos já
+  // encontrem os headers na primeira chamada.
+  if (typeof window !== 'undefined') {
     const token = session?.access_token || null;
     window.__ruptur = window.__ruptur || {};
     window.__ruptur.auth = token ? { token, tenantId } : null;
-  }, [session, tenantId]);
+  }
 
   const value = {
     // Estado
