@@ -7,7 +7,7 @@ test.describe('01 - Autenticação e Resolução de Tenant', () => {
     const page = authenticatedPage;
 
     // Verificar se a tela principal abriu e os itens básicos da UI renderizaram
-    await expect(page.locator('text=Dashboard').first()).toBeVisible();
+    await expect(page.locator('text=Cockpit').first()).toBeVisible();
     await expect(page.locator('text=Sair').or(page.locator('text=Logout')).first()).toBeVisible();
   });
 
@@ -19,7 +19,7 @@ test.describe('01 - Autenticação e Resolução de Tenant', () => {
 
     // Aguarda a renderização novamente para confirmar que não deslogou
     await page.waitForURL('**/dashboard**');
-    await expect(page.locator('text=Dashboard').first()).toBeVisible();
+    await expect(page.locator('text=Cockpit').first()).toBeVisible();
 
     // Exemplo de verificação de interceptação de rede para garantir que /api/me retornou tenant_id (caso exista a chamada explícita)
     // Opcional, mantido simples focando na UI conforme critério de aceite

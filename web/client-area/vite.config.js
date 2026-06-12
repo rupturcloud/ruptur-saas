@@ -7,9 +7,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Redireciona todas as chamadas /api/* para o servidor Node (warmup-core)
+      // Redireciona todas as chamadas /api/* para o gateway Node (porta 3001)
       '/api': {
-        target: 'http://localhost:8787',
+        target: process.env.API_BASE_URL || 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
       }

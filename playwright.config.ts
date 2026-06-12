@@ -45,6 +45,12 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },
+    {
+      command: `node modules/warmup-core/server.mjs`,
+      url: `http://127.0.0.1:8787/api/local/health`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
   ],
 
   projects: [
