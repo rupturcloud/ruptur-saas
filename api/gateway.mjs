@@ -244,7 +244,7 @@ const SECURITY_HEADERS = {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' https://fonts.gstatic.com data:; " +
     "img-src 'self' data: blob: https:; " +
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.uazapi.com https://*.sentry.io https://api.ruptur.cloud; " +
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.uazapi.com https://*.sentry.io https://api.ruptur.cloud https://fonts.googleapis.com; " +
     "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
 };
 
@@ -2605,24 +2605,15 @@ async function handler(req, res) {
     req.tenantId = tenantId;
     if (body) req.body = body;
 
-    // Credenciais UAZAPI: busca o provider_account do tenant via uazapiAccountService
-    let uazapiCredentials = null;
+    // Credenciais UAZAPI: busca todas as provider_accounts ativas e as passa para o contexto
+    let uazapiAccounts = [];
     if (uazapiAccountService) {
       try {
         const accounts = await uazapiAccountService.listAccounts();
         if (accounts?.length) {
-          uazapiCredentials = {
-            serverUrl: accounts[0].serverUrl || process.env.UAZAPI_BASE_URL || 'https://ruptur.uazapi.com',
-            adminToken: accounts[0].adminToken,
-          };
+          uazapiAccounts = accounts;
         }
-      } catch { /* sem credenciais — controller retorna 503 */ }
-    }
-    if (!uazapiCredentials) {
-      uazapiCredentials = {
-        serverUrl: process.env.UAZAPI_BASE_URL || 'https://ruptur.uazapi.com',
-        adminToken: process.env.UAZAPI_TOKEN || process.env.UAZAPI_ADMIN_TOKEN,
-      };
+      } catch { /* sem credenciais — ignora erro e usa fallback */ }
     }
 
     const matched = await registerWhatsappRoutes({
@@ -2630,7 +2621,7 @@ async function handler(req, res) {
       res,
       pathname,
       method: req.method,
-      ctx: { supabase, uazapiCredentials },
+      ctx: { supabase, uazapiAccounts },
     });
     if (matched) return;
     return json(res, 404, { error: 'Rota não encontrada' }, req);

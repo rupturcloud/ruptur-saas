@@ -24,6 +24,7 @@ import { PageHeader } from '../../ds/index.js';
 import { inboxApi } from '../../api/inbox.api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useInboxBadge } from '../../contexts/InboxBadgeContext.jsx';
+import { supabase } from '../../services/supabase.js';
 
 // ---------------------------------------------------------------------------
 // Estilos — escopo local, paleta V0 (var(--ink-*) clara + thread escuro WhatsApp)
@@ -503,10 +504,25 @@ function ChatRow({ chat, active, currentUserId, onClick }) {
 function Bubble({ msg }) {
   const sent = isFromMe(msg);
   const ts = msgTs(msg);
+  const status = msg.status; // sent, delivered, read
+
   return (
     <div className={`ibx-bubble ${sent ? 'sent' : 'received'}`}>
       <div>{msgText(msg)}</div>
-      {ts ? <div className="ts">{fmtTime(ts)}</div> : null}
+      {ts ? (
+        <div className="ts" style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+          {fmtTime(ts)}
+          {sent && status === 'sent' && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          )}
+          {sent && status === 'delivered' && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 6 7 17 2 12"></polyline><polyline points="22 6 11 17"></polyline></svg>
+          )}
+          {sent && status === 'read' && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2"><polyline points="18 6 7 17 2 12"></polyline><polyline points="22 6 11 17"></polyline></svg>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -544,14 +560,35 @@ export default function Inbox() {
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
 
-  // Painel do lead
-  const [showPanel, setShowPanel] = useState(true);
-  const [tagDraft, setTagDraft] = useState('');
+  // Painel do lead (CRM)
+  const [crmLead, setCrmLead] = useState(null);
+  const [crmOpp, setCrmOpp] = useState(null);
   const [savingLead, setSavingLead] = useState(false);
+  const [tagDraft, setTagDraft] = useState('');
+  const [sseLive, setSseLive] = useState(false);
   const [feedback, setFeedback] = useState('');
 
-  // Tempo real
-  const [sseLive, setSseLive] = useState(false);
+  // Busca CRM sempre que o chat ativo mudar
+  useEffect(() => {
+    if (!activeChat || !user?.tenant_id) {
+       setCrmLead(null);
+       setCrmOpp(null);
+       return;
+    }
+    const fetchCRM = async () => {
+      const cleanPhone = chatPhone(activeChat);
+      const { data: lead } = await supabase.from('crm_leads').select('*').eq('tenant_id', user.tenant_id).eq('phone', cleanPhone).maybeSingle();
+      if (lead) {
+        setCrmLead(lead);
+        const { data: opp } = await supabase.from('crm_opportunities').select('*').eq('tenant_id', user.tenant_id).eq('lead_id', lead.id).eq('status', 'OPEN').order('created_at', { ascending: false }).limit(1).maybeSingle();
+        setCrmOpp(opp);
+      } else {
+        setCrmLead(null);
+        setCrmOpp(null);
+      }
+    };
+    fetchCRM();
+  }, [activeChat, user?.tenant_id]);
 
   // Refs estáveis (evitam re-subscrição do SSE e closures velhos)
   const bottomRef = useRef(null);
@@ -668,28 +705,61 @@ export default function Inbox() {
     if (!msgsLoading && messages.length > 0) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, msgsLoading]);
 
-  // SSE: tempo real com fallback no polling (refs mantêm a subscrição estável)
+  // Realtime Supabase: substitui o SSE vulnerável do UAZAPI por websockets nativos
   useEffect(() => {
     if (!instanceKey || !authReady) return;
-    let es; let refreshT;
+    let refreshT;
+    
     const signal = () => {
       clearTimeout(refreshT);
       refreshT = setTimeout(() => {
         reloadChatsRef.current?.(true);
         const c = activeChatRef.current;
         if (c) loadMessagesRef.current?.(c, true);
-      }, 1200);
+      }, 500); // 500ms debounce
     };
-    try {
-      es = new EventSource(inboxApi.sseUrl(instanceKey));
-      es.onopen = () => setSseLive(true);
-      es.onerror = () => setSseLive(false);
-      es.addEventListener('messages', signal);
-      es.addEventListener('messages_update', signal);
-    } catch (e) {
-      console.warn('[Inbox] SSE indisponível, usando polling:', e.message);
-    }
-    return () => { clearTimeout(refreshT); setSseLive(false); try { es?.close(); } catch { /* noop */ } };
+
+    const channel = supabase.channel(`uazapi_messages_${instanceKey}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'uazapi_messages', filter: `instance_id=eq.${instanceKey}` },
+        (payload) => {
+          setSseLive(true);
+          const active = activeChatRef.current;
+          
+          // Se a mensagem for pro chat atual, atualiza na hora sem piscar
+          if (active && payload.new && payload.new.message) {
+            const rowMsg = payload.new.message;
+            if (payload.new.chat_id === (active.wa_chatid || active.wa_fastid)) {
+              setMessages(prev => {
+                const idx = prev.findIndex(m => msgId(m) === msgId(rowMsg));
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = { ...next[idx], ...rowMsg };
+                  return next;
+                }
+                return [...prev, rowMsg];
+              });
+            }
+          }
+
+          // Atualiza lista de chats com debounce
+          clearTimeout(refreshT);
+          refreshT = setTimeout(() => {
+            reloadChatsRef.current?.(true);
+          }, 800);
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setSseLive(true);
+        if (status === 'CHANNEL_ERROR' || status === 'CLOSED') setSseLive(false);
+      });
+
+    return () => { 
+      clearTimeout(refreshT); 
+      setSseLive(false); 
+      supabase.removeChannel(channel);
+    };
   }, [instanceKey, authReady]);
 
   // Feedback some sozinho
@@ -709,10 +779,10 @@ export default function Inbox() {
   const activeName = activeChat ? chatName(activeChat) : null;
   const activePhone = activeChat ? chatPhone(activeChat) : null;
   const activeIsGroup = activeChat?.wa_isGroup === true;
-  const activeTags = normalizeTags(activeChat?.lead_tags);
-  const activeAssignedMe = activeChat?.lead_assignedAttendant_id && activeChat.lead_assignedAttendant_id === userId;
-  const activeAssignedOther = activeChat?.lead_assignedAttendant_id && activeChat.lead_assignedAttendant_id !== userId;
-  const ticketOpen = activeChat?.lead_isTicketOpen === true;
+  const activeTags = crmLead?.tags || [];
+  const activeAssignedMe = crmLead?.assigned_user_id === user?.id;
+  const activeAssignedOther = crmLead?.assigned_user_id && crmLead.assigned_user_id !== user?.id;
+  const ticketOpen = crmOpp?.status === 'OPEN';
 
   // -- Ações ----------------------------------------------------------------
   async function handleSend() {
@@ -737,38 +807,54 @@ export default function Inbox() {
     }
   }
 
-  /** Aplica campos de lead via editLead, atualiza chat ativo e lista */
-  async function patchLead(fields, okMsg) {
-    if (!instanceKey || !activeChat) return;
-    const chatId = activeChat.wa_chatid || activeChat.wa_fastid;
-    if (!chatId) return;
+  /** Aplica campos de lead diretamente no CRM (Supabase) */
+  async function patchCRMLead(fields, okMsg) {
+    if (!crmLead) return;
     setSavingLead(true);
     try {
-      await inboxApi.editLead(instanceKey, chatId, fields);
-      setActiveChat(prev => (prev ? { ...prev, ...fields } : prev));
-      setChats(prev => prev.map(c => ((c.wa_chatid || c.wa_fastid) === chatId ? { ...c, ...fields } : c)));
+      const { data, error } = await supabase.from('crm_leads').update(fields).eq('id', crmLead.id).select().single();
+      if (error) throw error;
+      setCrmLead(data);
       if (okMsg) setFeedback(okMsg);
-      reloadChats(true);
     } catch (e) {
-      console.warn('[Inbox] editLead falhou:', e.message);
-      setFeedback('Não foi possível salvar.');
+      console.warn('[Inbox] patchCRMLead falhou:', e.message);
+      setFeedback('Não foi possível salvar no CRM.');
     } finally {
       setSavingLead(false);
     }
   }
 
-  const assignToMe = () => patchLead({ lead_assignedAttendant_id: userId }, 'Atribuído a você.');
-  const unassign = () => patchLead({ lead_assignedAttendant_id: '' }, 'Atribuição removida.');
-  const toggleTicket = () => patchLead({ lead_isTicketOpen: !ticketOpen }, ticketOpen ? 'Ticket fechado.' : 'Ticket reaberto.');
+  async function toggleCRMTicket() {
+    if (!crmOpp) {
+       setFeedback('Nenhum ticket aberto para alterar.');
+       return;
+    }
+    setSavingLead(true);
+    try {
+      const newStatus = crmOpp.status === 'OPEN' ? 'CLOSED' : 'OPEN';
+      const { data, error } = await supabase.from('crm_opportunities').update({ status: newStatus }).eq('id', crmOpp.id).select().single();
+      if (error) throw error;
+      setCrmOpp(data);
+      setFeedback(newStatus === 'OPEN' ? 'Ticket reaberto.' : 'Ticket fechado.');
+    } catch(e) {
+      setFeedback('Erro ao alterar ticket no CRM.');
+    } finally {
+      setSavingLead(false);
+    }
+  }
+
+  const assignToMe = () => patchCRMLead({ assigned_user_id: user.id }, 'Atribuído a você.');
+  const unassign = () => patchCRMLead({ assigned_user_id: null }, 'Atribuição removida.');
+  const toggleTicket = toggleCRMTicket;
 
   function addTag() {
     const t = tagDraft.trim();
     if (!t) return;
     if (activeTags.includes(t)) { setTagDraft(''); return; }
-    patchLead({ lead_tags: [...activeTags, t] }, 'Etiqueta adicionada.');
+    patchCRMLead({ tags: [...activeTags, t] }, 'Etiqueta adicionada.');
     setTagDraft('');
   }
-  const removeTag = (t) => patchLead({ lead_tags: activeTags.filter(x => x !== t) }, 'Etiqueta removida.');
+  const removeTag = (t) => patchCRMLead({ tags: activeTags.filter(x => x !== t) }, 'Etiqueta removida.');
 
   // -- Render: agrupa mensagens por dia para separadores --------------------
   const rendered = [];

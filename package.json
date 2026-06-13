@@ -37,7 +37,9 @@
     "test:unit": "npm test -- --runInBand",
     "test:coverage": "npm test -- --runInBand --coverage",
     "quality": "npm run lint && npm run test:unit && npm run build",
-    "review": "node scripts/review-checklist.mjs && node scripts/security-check.mjs"
+    "review": "node scripts/review-checklist.mjs && node scripts/security-check.mjs",
+    "diagnostico": "node -r dotenv/config scripts/diagnostico.mjs",
+    "migration:analytics": "echo 'Acesse https://supabase.com/dashboard/project/axrwlboyowoskdxeogba/sql/new e cole o conteúdo de migrations/026_analytics_tables_fix.sql'"
   },
   "dependencies": {
     "@google-cloud/pubsub": "^5.3.0",

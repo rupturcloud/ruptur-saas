@@ -8,13 +8,18 @@
 import { fusionBus } from './fusion.service.js';
 
 export class WhatsappService {
-  constructor({ repository, adapter }) {
+  constructor({ repository, adapter, adapterFactory }) {
     if (!repository) throw new Error('WhatsappService requer repository');
-    if (!adapter) throw new Error('WhatsappService requer adapter');
     this.repo = repository;
-    this.adapter = adapter;
+    this.adapterFactory = adapterFactory || (() => adapter);
     // Fusion bus: singleton de processo — sinais persistem entre requests
     this.fusion = fusionBus;
+  }
+
+  _getAdapter(row = null) {
+    const provider = row?.provider_accounts || {};
+    const accountId = row?.tenant_providers?.account_id;
+    return this.adapterFactory(provider.server_url, accountId);
   }
 
   async listNumbers({ tenantId }) {
@@ -38,7 +43,7 @@ export class WhatsappService {
     // Se remote_instance_id ainda é "pending-...", precisa criar no UAZAPI primeiro.
     let remoteId = row.remote_instance_id;
     if (!remoteId || remoteId.startsWith('pending-')) {
-      const created = await this.adapter.createInstance({ name: row.instance_name });
+      const created = await this._getAdapter(row).createInstance({ name: row.instance_name });
       // providerId === instanceToken (o campo `token` retornado pela UAZAPI)
       // É o valor usado como header `token:` em todas as chamadas subsequentes.
       remoteId = created.providerId;
@@ -56,7 +61,7 @@ export class WhatsappService {
     // cria nova instância e tenta de novo (transparent para o usuário).
     let session;
     try {
-      session = await this.adapter.startSession(remoteId, { phone });
+      session = await this._getAdapter(row).startSession(remoteId, { phone });
     } catch (err) {
       const msg = (err?.message || '').toLowerCase();
       const isInvalidToken = msg.includes('invalid token') || msg.includes('not found') ||
@@ -64,7 +69,7 @@ export class WhatsappService {
       if (!isInvalidToken) throw err;
       // Token inválido → instância expirou no provider → recriar
       console.warn(`[whatsapp.service] connect: token inválido (${remoteId?.slice(0, 16)}…) — recriando instância.`);
-      const created = await this.adapter.createInstance({ name: row.instance_name });
+      const created = await this._getAdapter(row).createInstance({ name: row.instance_name });
       remoteId = created.providerId;
       await this.repo.updateStatus({
         id,
@@ -72,7 +77,7 @@ export class WhatsappService {
         remoteInstanceId: remoteId,
         metadata: { ...(row.metadata || {}), provider: { internalId: created.internalId } },
       });
-      session = await this.adapter.startSession(remoteId, { phone });
+      session = await this._getAdapter(row).startSession(remoteId, { phone });
     }
 
     await this.repo.updateStatus({ id, status: session.status?.toLowerCase() || 'connecting' });
@@ -105,7 +110,7 @@ export class WhatsappService {
 
     let remote;
     try {
-      remote = await this.adapter.getStatus(row.remote_instance_id);
+      remote = await this._getAdapter(row).getStatus(row.remote_instance_id);
     } catch (err) {
       // Instância expirou no free server (TTL 1h) — retorna estado especial sem relançar
       if (err?.code === 'ERR_INSTANCE_EXPIRED') {
@@ -172,7 +177,7 @@ export class WhatsappService {
     if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
       return { id, score: null };
     }
-    return { id, ...(await this.adapter.getHealth(row.remote_instance_id)) };
+    return { id, ...(await this._getAdapter(row).getHealth(row.remote_instance_id)) };
   }
 
   /**
@@ -257,7 +262,7 @@ export class WhatsappService {
     const remoteId = row.remote_instance_id;
     if (remoteId && !remoteId.startsWith('pending-')) {
       try {
-        await this.adapter.deleteInstance(remoteId);
+        await this._getAdapter(row).deleteInstance(remoteId);
       } catch (e) {
         // Ignora: instância pode ter expirado (free server: 1h) ou já deletada
         console.warn('[whatsapp.service] deleteInstance provider (ignorado):', e?.message);
@@ -297,7 +302,7 @@ export class WhatsappService {
       return { id, status: 'disconnected' };
     }
     try {
-      await this.adapter.disconnect(row.remote_instance_id);
+      await this._getAdapter(row).disconnect(row.remote_instance_id);
     } catch (e) {
       // Ignora erros do provider (pode já estar desconectado) e continua com atualização local
       console.warn('[whatsapp.service] disconnect provider error (ignorado):', e?.message);
@@ -318,7 +323,7 @@ export class WhatsappService {
       return { id, webhook: localWebhook };
     }
     try {
-      const remote = await this.adapter.getWebhook(row.remote_instance_id);
+      const remote = await this._getAdapter(row).getWebhook(row.remote_instance_id);
       return { id, webhook: remote ?? localWebhook };
     } catch {
       return { id, webhook: localWebhook };
@@ -351,7 +356,7 @@ export class WhatsappService {
     // Aplica no provider se já tem remote_instance_id
     if (row.remote_instance_id && !row.remote_instance_id.startsWith('pending-')) {
       try {
-        await this.adapter.setWebhook(row.remote_instance_id, webhookConfig);
+        await this._getAdapter(row).setWebhook(row.remote_instance_id, webhookConfig);
       } catch (e) {
         console.warn('[whatsapp.service] setWebhook provider error:', e?.message);
         // Não falha — config salva localmente, será aplicada na próxima reconexão
@@ -374,7 +379,7 @@ export class WhatsappService {
       return { id, chats: [] };
     }
     try {
-      const chats = await this.adapter.getChats(row.remote_instance_id, { limit });
+      const chats = await this._getAdapter(row).getChats(row.remote_instance_id, { limit });
       return { id, chats };
     } catch (e) {
       console.warn('[whatsapp.service] getChats falhou:', e.message);
@@ -403,7 +408,7 @@ export class WhatsappService {
     if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
       return { id, messages: [] };
     }
-    const messages = await this.adapter.getMessages(row.remote_instance_id, { chatId, limit });
+    const messages = await this._getAdapter(row).getMessages(row.remote_instance_id, { chatId, limit });
     return { id, messages };
   }
 
@@ -420,7 +425,7 @@ export class WhatsappService {
     if (!remoteId || remoteId.startsWith('pending-')) {
       throw new BusinessError('ERR_NOT_CONNECTED', 'Instância não conectada ao provider.', 400);
     }
-    await this.adapter.sendMessage(remoteId, { chatId, text });
+    await this._getAdapter(row).sendMessage(remoteId, { chatId, text });
     return { id, sent: true, timestamp: Date.now() };
   }
 
@@ -434,7 +439,7 @@ export class WhatsappService {
     if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
       throw new BusinessError('ERR_NOT_CONNECTED', 'Instância não conectada ao provider.', 400);
     }
-    await this.adapter.proxySSE(row.remote_instance_id, req, res);
+    await this._getAdapter(row).proxySSE(row.remote_instance_id, req, res);
   }
 
   // ─── Reset ────────────────────────────────────────────────────────────────────
@@ -449,7 +454,7 @@ export class WhatsappService {
     if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
       throw new BusinessError('ERR_NOT_CONNECTED', 'Instância ainda não conectada ao provider.', 400);
     }
-    return this.adapter.resetInstance(row.remote_instance_id);
+    return this._getAdapter(row).resetInstance(row.remote_instance_id);
   }
 
   // ─── Perfil WhatsApp ──────────────────────────────────────────────────────────
@@ -466,7 +471,7 @@ export class WhatsappService {
     if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
       throw new BusinessError('ERR_NOT_CONNECTED', 'Instância não está conectada.', 400);
     }
-    return this.adapter.updateProfileName(row.remote_instance_id, name);
+    return this._getAdapter(row).updateProfileName(row.remote_instance_id, name);
   }
 
   /**
@@ -480,7 +485,7 @@ export class WhatsappService {
     if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
       throw new BusinessError('ERR_NOT_CONNECTED', 'Instância não está conectada.', 400);
     }
-    return this.adapter.updateProfileImage(row.remote_instance_id, image);
+    return this._getAdapter(row).updateProfileImage(row.remote_instance_id, image);
   }
 
   // ─── Privacidade ──────────────────────────────────────────────────────────────
@@ -492,7 +497,7 @@ export class WhatsappService {
       return { id, privacy: null };
     }
     try {
-      const privacy = await this.adapter.getPrivacy(row.remote_instance_id);
+      const privacy = await this._getAdapter(row).getPrivacy(row.remote_instance_id);
       return { id, privacy };
     } catch {
       return { id, privacy: null };
@@ -505,7 +510,7 @@ export class WhatsappService {
     if (!row.remote_instance_id || row.remote_instance_id.startsWith('pending-')) {
       throw new BusinessError('ERR_NOT_CONNECTED', 'Instância não está conectada.', 400);
     }
-    return this.adapter.setPrivacy(row.remote_instance_id, settings);
+    return this._getAdapter(row).setPrivacy(row.remote_instance_id, settings);
   }
 
   // ─── Limites de mensagens ─────────────────────────────────────────────────────
@@ -517,7 +522,7 @@ export class WhatsappService {
       return { id, limits: null };
     }
     try {
-      const limits = await this.adapter.getMessagesLimits(row.remote_instance_id);
+      const limits = await this._getAdapter(row).getMessagesLimits(row.remote_instance_id);
       return { id, limits };
     } catch {
       return { id, limits: null };
@@ -533,7 +538,7 @@ export class WhatsappService {
       return { id, groups: [] };
     }
     try {
-      const groups = await this.adapter.listGroups(row.remote_instance_id);
+      const groups = await this._getAdapter(row).listGroups(row.remote_instance_id);
       return { id, groups: Array.isArray(groups) ? groups : (groups?.groups || []) };
     } catch {
       return { id, groups: [] };
@@ -554,7 +559,7 @@ export class WhatsappService {
     // Propaga ao provider UAZAPI se conectado
     if (row.remote_instance_id && !row.remote_instance_id.startsWith('pending-')) {
       try {
-        await this.adapter.updateInstanceName(row.remote_instance_id, name);
+        await this._getAdapter(row).updateInstanceName(row.remote_instance_id, name);
       } catch (e) {
         console.warn('[whatsapp.service] updateInstanceName provider error (ignorado):', e?.message);
       }

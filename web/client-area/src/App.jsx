@@ -31,6 +31,9 @@ const AquecimentoV2  = lazy(() => import('./v2/pages/Aquecimento.jsx'));
 const InboxV2        = lazy(() => import('./v2/pages/Inbox.jsx'));
 const IntegrationsV2 = lazy(() => import('./v2/pages/Integrations.jsx'));
 const BillingV2      = lazy(() => import('./v2/pages/Billing.jsx'));
+const CampaignsV2    = lazy(() => import('./v2/pages/Campaigns.jsx'));
+const PipelineV2     = lazy(() => import('./v2/pages/Pipeline.jsx'));
+
 const PlaceholderV2  = lazy(() => import('./v2/pages/Placeholder.jsx'));
 
 // Admin plataforma (super admin)
@@ -38,10 +41,10 @@ const AdminDashboard      = lazy(() => import('./pages/AdminDashboard.jsx'));
 const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard.jsx'));
 
 const V0_STUBS = [
-  'personas','pricing','leads','pipeline','accounts','campaigns',
-  'flows','playbooks','insights','indicacoes','sprints',
-  'founder','remarketing','outreach','grupos','canais',
-  'rede-coletiva','business','growth',
+  'relatorios', 'chatbots', 'automacoes', 'minha-conta',
+  'personas','pricing','leads','flows','playbooks','insights',
+  'indicacoes','sprints','founder','remarketing','outreach',
+  'grupos','canais','rede-coletiva','business','growth',
 ];
 
 function LoadingScreen() {
@@ -98,6 +101,8 @@ function App() {
                 <Route path="inbox"       element={<InboxV2 />} />
                 <Route path="integracoes" element={<IntegrationsV2 />} />
                 <Route path="billing"     element={<BillingV2 />} />
+                <Route path="campaigns"   element={<CampaignsV2 />} />
+                <Route path="pipeline"    element={<PipelineV2 />} />
                 {/* Administração da plataforma — dentro do AppShell laranja, só platform admin */}
                 <Route element={<ProtectedRoute requirePlatformAdmin />}>
                   <Route path="plataforma"            element={<AdminDashboard />} />

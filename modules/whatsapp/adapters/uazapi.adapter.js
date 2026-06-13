@@ -25,17 +25,19 @@ const CACHE_TTL_MS      = 5 * 60 * 1000; // 5 minutos
 const CB_THRESHOLD      = 3;             // falhas consecutivas para abrir circuito
 const CB_RESET_MS       = 30 * 1000;    // 30s — janela do circuit breaker
 
+const _globalStateCache = new Map();
+const _globalFailures   = new Map();
+
 export class UazapiWhatsappAdapter {
   constructor({ adminToken, serverUrl, instanceToken } = {}) {
     this._client = new LowLevelUazapi({ adminToken, serverUrl, instanceToken });
     this._serverUrl  = serverUrl || 'https://free.uazapi.com';
     this._adminToken = adminToken;
 
-    // Cache de último estado conhecido: instanceToken → { status, phone, lastSeen, cachedAt }
-    this._stateCache = new Map();
-
-    // Circuit breaker por instância: instanceToken → { count, lastFailAt }
-    this._failures = new Map();
+    // Usando cache e cb globais no escopo do módulo
+    // Permite uso de instâncias transientes do adapter sem perder o estado
+    this._stateCache = _globalStateCache;
+    this._failures = _globalFailures;
   }
 
   // ─── helpers de resiliência ────────────────────────────────────────────────
