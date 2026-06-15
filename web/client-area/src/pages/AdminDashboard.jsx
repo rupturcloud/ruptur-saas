@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import TenantManager from './TenantManager';
 import { motion } from 'framer-motion';
 import { Activity, Building2, CreditCard, Database, Loader2, Plus, RefreshCw, Search, Server, Shield, Smartphone, Users, Zap } from 'lucide-react';
@@ -229,6 +229,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [clients, setClients] = useState([]);
   const [instances, setInstances] = useState([]);
+  const [editingInstance, setEditingInstance] = useState(null);
   const [providerAccounts, setProviderAccounts] = useState([]);
   const [paymentGateways, setPaymentGateways] = useState([]);
   const [commercialCatalog, setCommercialCatalog] = useState({});
@@ -560,7 +561,7 @@ export default function AdminDashboard() {
               <div className="panel glass">
                 <div className="table-header instances"><span>Cliente</span><span>Provider</span><span>Instância</span><span>Número</span><span>Status</span><span>Última atividade</span></div>
                 {instances.map((instance) => (
-                  <div className="table-row instances" key={instance.id}>
+                  <div className="table-row instances" key={instance.id} onClick={() => setEditingInstance(instance)} style={{ cursor: 'pointer' }}>
                     <span>{instance.tenant?.name || '—'}<small>{instance.tenant?.slug || ''}</small></span>
                     <span>{instance.provider || 'uazapi'}</span>
                     <span>{instance.instance_name || instance.remote_instance_id || '—'}</span>
@@ -650,6 +651,16 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {editingInstance && (
+        <InstanceModal
+          instance={editingInstance}
+          clients={clients}
+          onClose={() => setEditingInstance(null)}
+          onSave={() => { setEditingInstance(null); loadAdminData(search); }}
+          session={session}
+        />
       )}
 
       <style>{css}</style>
@@ -1079,15 +1090,468 @@ const ROLE_OPTS = ['owner', 'admin', 'member'];
 const ROLE_STYLE = {
   owner:  { color: '#FF6A3D', bg: 'rgba(255,106,61,.15)',  border: 'rgba(255,106,61,.3)' },
   admin:  { color: '#818CF8', bg: 'rgba(99,102,241,.15)',  border: 'rgba(99,102,241,.3)' },
-  member: { color: '#94a3b8', bg: 'rgba(148,163,184,.1)',  border: 'rgba(148,163,184,.25)' },
+  member: { color: '#94a3b8', bg: 'rgba(148,163,184,.1)',  border: 'rgba(148,163,184,.2)' },
 };
 
 function RolePill({ role }) {
   const s = ROLE_STYLE[role] || ROLE_STYLE.member;
   return (
-    <span className="cell-status" style={{ color: s.color, background: s.bg, borderColor: s.border }}>
+    <span style={{
+      background: s.bg, color: s.color, border: `1px solid ${s.border}`,
+      padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, letterSpacing: '.02em',
+      display: 'inline-block'
+    }}>
       {role}
     </span>
+  );
+}
+
+// ============================================================
+//  Estilos dos Modais do Admin
+// ============================================================
+const modalStyles = {
+  overlay: {
+    position: 'fixed', inset: 0, zIndex: 1000,
+    background: 'rgba(0,0,0,.75)', backdropFilter: 'blur(6px)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 20,
+  },
+  modal: {
+    background: '#0f0f1a', border: '1px solid rgba(255,255,255,.08)',
+    borderRadius: 16, padding: 24, width: 460, maxWidth: '100%',
+    maxHeight: '90vh', overflowY: 'auto',
+    boxShadow: '0 24px 60px rgba(0,0,0,.5)',
+  },
+  modalHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  label: {
+    display: 'flex', flexDirection: 'column', gap: 4,
+    fontSize: 12, fontWeight: 600, color: '#9AA2AE',
+    textAlign: 'left',
+  },
+  input: {
+    background: 'rgba(255,255,255,.05)',
+    border: '1px solid rgba(255,255,255,.08)',
+    borderRadius: 8, color: '#fff',
+    padding: '8px 12px', fontSize: 13,
+    outline: 'none',
+  },
+  btnDanger: {
+    display: 'flex', alignItems: 'center', gap: 6,
+    background: 'rgba(255,77,106,.15)',
+    border: '1px solid rgba(255,77,106,.25)',
+    color: '#ff4d6a', borderRadius: 8,
+    padding: '8px 14px', fontSize: 13, cursor: 'pointer',
+    fontWeight: 600,
+  },
+  btnGhost: {
+    display: 'flex', alignItems: 'center', gap: 6,
+    background: 'rgba(255,255,255,.05)',
+    border: '1px solid rgba(255,255,255,.08)',
+    color: '#9AA2AE', borderRadius: 8,
+    padding: '8px 14px', fontSize: 13, cursor: 'pointer',
+  },
+  iconBtn: {
+    background: 'none', border: 'none',
+    color: '#9AA2AE', cursor: 'pointer',
+    fontSize: 20, lineHeight: '20px', padding: 4,
+  },
+  errorBanner: {
+    background: 'rgba(255,77,106,.12)', border: '1px solid rgba(255,77,106,.3)',
+    color: '#ff4d6a', borderRadius: 8, padding: '10px 14px',
+    fontSize: 13, marginBottom: 12,
+  },
+};
+
+// ============================================================
+//  InstanceModal — Edição e gerenciamento de instância WhatsApp
+// ============================================================
+function InstanceModal({ instance, clients, onClose, onSave, session }) {
+  const h = { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' };
+  const [form, setForm] = useState(() => ({
+    name: instance?.instance_name || '',
+  }));
+  const initialForm = useRef(form);
+  const [targetTenantId, setTargetTenantId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(''); // 'saving' | 'saved' | 'error'
+  const [err, setErr] = useState('');
+
+  // Autosave com debounce de 1.5s
+  useEffect(() => {
+    const hasChanges = form.name !== initialForm.current.name;
+    if (!hasChanges) return;
+
+    setSaveStatus('saving');
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/admin/platform/instances/${instance.id}`, {
+          method: 'PATCH',
+          headers: h,
+          body: JSON.stringify({ name: form.name }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erro ao salvar nome da instância');
+
+        initialForm.current = { ...form };
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus(''), 2000);
+      } catch (e) {
+        setSaveStatus('error');
+        setErr(e.message);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [form]);
+
+  async function handleMoveInstance() {
+    if (!targetTenantId) return;
+    const destTenant = clients.find(c => c.id === targetTenantId);
+    const msg = `ATENÇÃO: Mover a instância "${instance.instance_name || instance.remote_instance_id}" para o tenant "${destTenant?.name || destTenant?.slug}"?\n\nO cliente atual perderá o controle do WhatsApp imediatamente.`;
+    if (!window.confirm(msg)) return;
+
+    setSaving(true); setErr('');
+    try {
+      const res = await fetch(`/api/admin/platform/instances/${instance.id}/move`, {
+        method: 'POST',
+        headers: h,
+        body: JSON.stringify({ targetTenantId }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erro ao mover instância');
+      onSave();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemoveInstance() {
+    if (!window.confirm(`ATENÇÃO: Excluir e desconectar a instância "${instance.instance_name || instance.remote_instance_id}"?\n\nEsta ação é irreversível.`)) return;
+    setSaving(true); setErr('');
+    try {
+      const res = await fetch(`/api/admin/platform/instances/${instance.id}`, {
+        method: 'DELETE',
+        headers: h,
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erro ao excluir instância');
+      onSave();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleCancel() {
+    const hasChanges = form.name !== initialForm.current.name;
+    if (hasChanges) {
+      if (window.confirm('Você tem alterações não salvas. Deseja descartá-las?')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  }
+
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      handleCancel();
+    }
+  };
+
+  return (
+    <div style={modalStyles.overlay} onClick={handleOverlayClick}>
+      <div style={modalStyles.modal}>
+        <div style={modalStyles.modalHeader}>
+          <div>
+            <h3 style={{ margin: 0, color: 'var(--text-main)' }}>
+              Gerenciar Instância
+            </h3>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              {saveStatus === 'saving' && '⏳ Salvando automaticamente...'}
+              {saveStatus === 'saved' && '✅ Nome salvo!'}
+              {saveStatus === 'error' && '❌ Erro ao salvar.'}
+            </span>
+          </div>
+          <button style={modalStyles.iconBtn} onClick={handleCancel}>&times;</button>
+        </div>
+
+        {err && <div style={modalStyles.errorBanner}>{err}</div>}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, color: 'var(--text-muted)', fontSize: 13, textAlign: 'left' }}>
+          <div>
+            <div><strong>Remote ID:</strong> {instance.remote_instance_id}</div>
+            <div><strong>Número WhatsApp:</strong> {instance.instance_number || '—'}</div>
+            <div><strong>Status:</strong> {instance.status}</div>
+            <div><strong>Plataforma:</strong> {instance.platform || '—'}</div>
+          </div>
+
+          <label style={modalStyles.label}>
+            Nome da instância
+            <input style={modalStyles.input} value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="Nome interno" required />
+          </label>
+
+          <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: 14 }}>
+            <h4 style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--text-main)' }}>Mover Instância de Tenant</h4>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select style={{ ...modalStyles.input, flex: 1 }} value={targetTenantId}
+                onChange={e => setTargetTenantId(e.target.value)}>
+                <option value="">Selecione o tenant destino...</option>
+                {clients.filter(c => c.id !== instance.tenant?.id).map(c => (
+                  <option key={c.id} value={c.id}>{c.name || c.slug}</option>
+                ))}
+              </select>
+              <button type="button" className="action-btn" style={{ padding: '0 16px', fontSize: 12 }}
+                onClick={handleMoveInstance} disabled={saving || !targetTenantId}>
+                Mover
+              </button>
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button type="button" style={modalStyles.btnDanger} onClick={handleRemoveInstance} disabled={saving}>
+              Excluir Instância
+            </button>
+            <button type="button" style={modalStyles.btnGhost} onClick={handleCancel}>Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+//  UserModal — Edição e gerenciamento de usuário
+// ============================================================
+function UserModal({ member, tenantId, tenants, onClose, onSave, session }) {
+  const h = { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' };
+  const [form, setForm] = useState(() => ({
+    fullName: member?.full_name || '',
+    email: member?.email || '',
+    role: member?.role || 'member',
+  }));
+  const initialForm = useRef(form);
+  const [targetTenantId, setTargetTenantId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(''); // 'saving' | 'saved' | 'error'
+  const [err, setErr] = useState('');
+
+  // Autosave com debounce de 1.5s
+  useEffect(() => {
+    const hasChanges = Object.keys(form).some(key => form[key] !== initialForm.current[key]);
+    if (!hasChanges) return;
+
+    setSaveStatus('saving');
+    const timer = setTimeout(async () => {
+      try {
+        // Se mudou a role, salva usando a rota de role
+        if (form.role !== initialForm.current.role) {
+          const rRes = await fetch(`/api/admin/tenants/${tenantId}/members/${member.user_id}/role`, {
+            method: 'PATCH',
+            headers: h,
+            body: JSON.stringify({ role: form.role }),
+          });
+          if (!rRes.ok) throw new Error((await rRes.json().catch(() => ({}))).error || 'Erro ao salvar role');
+        }
+
+        // Se mudou nome ou email, salva na rota de plataforma
+        if (form.fullName !== initialForm.current.fullName || form.email !== initialForm.current.email) {
+          const uRes = await fetch(`/api/admin/platform/users/${member.user_id}`, {
+            method: 'PATCH',
+            headers: h,
+            body: JSON.stringify({ fullName: form.fullName, email: form.email }),
+          });
+          if (!uRes.ok) throw new Error((await uRes.json().catch(() => ({}))).error || 'Erro ao salvar dados');
+        }
+
+        initialForm.current = { ...form };
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus(''), 2000);
+      } catch (e) {
+        setSaveStatus('error');
+        setErr(e.message);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [form]);
+
+  async function handleMoveUser() {
+    if (!targetTenantId) return;
+    const destTenant = tenants.find(t => t.id === targetTenantId);
+    const msg = `ATENÇÃO: Mover o usuário "${member.full_name || member.email}" para o tenant "${destTenant?.name || destTenant?.slug}"?\n\nEle perderá acesso às instâncias e dados do tenant atual imediatamente.`;
+    if (!window.confirm(msg)) return;
+
+    setSaving(true); setErr('');
+    try {
+      const res = await fetch(`/api/admin/platform/users/${member.user_id}/move`, {
+        method: 'POST',
+        headers: h,
+        body: JSON.stringify({ targetTenantId }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erro ao mover usuário');
+      onSave();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemoveUser() {
+    if (!window.confirm(`ATENÇÃO: Remover o usuário "${member.full_name || member.email}" deste tenant?\n\nEsta ação é irreversível.`)) return;
+    setSaving(true); setErr('');
+    try {
+      const res = await fetch(`/api/admin/platform/tenants/${tenantId}/members/${member.user_id}`, {
+        method: 'DELETE',
+        headers: h,
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erro ao remover usuário');
+      onSave();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleConfirmEmail() {
+    setSaving(true); setErr('');
+    try {
+      const res = await fetch(`/api/admin/platform/users/${member.user_id}/confirm-email`, {
+        method: 'POST',
+        headers: h,
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erro ao confirmar email');
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(''), 2000);
+      onSave();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    setSaving(true); setErr('');
+    try {
+      const res = await fetch(`/api/admin/platform/users/${member.user_id}/reset-password`, {
+        method: 'POST',
+        headers: h,
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erro ao resetar senha');
+      window.alert('Link de recuperação enviado com sucesso!');
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleCancel() {
+    const hasChanges = Object.keys(form).some(key => form[key] !== initialForm.current[key]);
+    if (hasChanges) {
+      if (window.confirm('Você tem alterações não salvas. Deseja descartá-las?')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  }
+
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      handleCancel();
+    }
+  };
+
+  return (
+    <div style={modalStyles.overlay} onClick={handleOverlayClick}>
+      <div style={modalStyles.modal}>
+        <div style={modalStyles.modalHeader}>
+          <div>
+            <h3 style={{ margin: 0, color: 'var(--text-main)' }}>
+              Editar Usuário
+            </h3>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              {saveStatus === 'saving' && '⏳ Salvando automaticamente...'}
+              {saveStatus === 'saved' && '✅ Alterações salvas!'}
+              {saveStatus === 'error' && '❌ Erro ao salvar.'}
+            </span>
+          </div>
+          <button style={modalStyles.iconBtn} onClick={handleCancel}>&times;</button>
+        </div>
+
+        {err && <div style={modalStyles.errorBanner}>{err}</div>}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <label style={modalStyles.label}>
+            Nome completo
+            <input style={modalStyles.input} value={form.fullName}
+              onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
+              placeholder="Nome" required />
+          </label>
+
+          <label style={modalStyles.label}>
+            E-mail
+            <input style={modalStyles.input} type="email" value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              placeholder="email@empresa.com" required />
+          </label>
+
+          <label style={modalStyles.label}>
+            Role do membro
+            <select style={modalStyles.input} value={form.role}
+              onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+              <option value="owner">owner</option>
+              <option value="admin">admin</option>
+              <option value="member">member</option>
+            </select>
+          </label>
+
+          <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: 14 }}>
+            <h4 style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--text-main)', textAlign: 'left' }}>Mover de Workspace / Tenant</h4>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select style={{ ...modalStyles.input, flex: 1 }} value={targetTenantId}
+                onChange={e => setTargetTenantId(e.target.value)}>
+                <option value="">Selecione o tenant destino...</option>
+                {tenants.filter(t => t.id !== tenantId).map(t => (
+                  <option key={t.id} value={t.id}>{t.name || t.slug}</option>
+                ))}
+              </select>
+              <button type="button" className="action-btn" style={{ padding: '0 16px', fontSize: 12 }}
+                onClick={handleMoveUser} disabled={saving || !targetTenantId}>
+                Mover
+              </button>
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {!member.email_confirmed && (
+              <button type="button" className="action-btn" onClick={handleConfirmEmail} disabled={saving}>
+                Confirmar E-mail
+              </button>
+            )}
+            <button type="button" className="action-btn" onClick={handleResetPassword} disabled={saving}>
+              Enviar Reset de Senha
+            </button>
+          </div>
+
+          <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button type="button" style={modalStyles.btnDanger} onClick={handleRemoveUser} disabled={saving}>
+              Remover do Tenant
+            </button>
+            <button type="button" style={modalStyles.btnGhost} onClick={handleCancel}>Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1099,8 +1563,9 @@ function UsersPanel({ session }) {
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [actionState, setActionState] = useState({}); // { [userId]: 'saving' | 'ok' | 'error' }
   const [roleEditing, setRoleEditing] = useState(null); // userId com dropdown aberto
+  const [editingUser, setEditingUser] = useState(null);
 
-  const h = { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' };
+  const h = useMemo(() => ({ Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }), [session?.access_token]);
 
   // Carregar tenants
   useEffect(() => {
@@ -1114,42 +1579,46 @@ function UsersPanel({ session }) {
         if (ruptur) setSelectedTenantId(ruptur.id);
       })
       .finally(() => setLoadingTenants(false));
-  }, [session?.access_token]);
+  }, [session?.access_token, h]);
 
   // Carregar membros do tenant selecionado
-  useEffect(() => {
+  const loadMembers = useCallback(() => {
     if (!selectedTenantId || !session?.access_token) return;
     setLoadingMembers(true);
     fetch(`/api/admin/tenants/${selectedTenantId}/members?includeInactive=true`, { headers: h })
       .then(r => r.ok ? r.json() : { members: [] })
       .then(d => setMembers(d.members || []))
       .finally(() => setLoadingMembers(false));
-  }, [selectedTenantId, session?.access_token]);
+  }, [selectedTenantId, session?.access_token, h]);
 
-  const doAction = async (userId, path, body = null) => {
+  useEffect(() => {
+    loadMembers();
+  }, [loadMembers]);
+
+  const doAction = async (userId, path, method = 'POST', body = null) => {
     setActionState(s => ({ ...s, [userId]: 'saving' }));
     try {
-      const opts = { method: 'POST', headers: h };
+      const opts = { method, headers: h };
       if (body) opts.body = JSON.stringify(body);
       const res = await fetch(path, opts);
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erro ${res.status}`);
       setActionState(s => ({ ...s, [userId]: 'ok' }));
       setTimeout(() => setActionState(s => { const n = { ...s }; delete n[userId]; return n; }), 2500);
-      // Recarregar membros
-      const fresh = await fetch(`/api/admin/tenants/${selectedTenantId}/members?includeInactive=true`, { headers: h });
-      if (fresh.ok) setMembers((await fresh.json()).members || []);
+      loadMembers();
+      return { success: true };
     } catch (e) {
       setActionState(s => ({ ...s, [userId]: 'error:' + e.message }));
       setTimeout(() => setActionState(s => { const n = { ...s }; delete n[userId]; return n; }), 3500);
+      return { success: false, error: e.message };
     }
   };
 
   const changeRole = (userId, role) => {
     setRoleEditing(null);
-    doAction(userId, `/api/admin/tenants/${selectedTenantId}/members/${userId}/role`, { role });
+    doAction(userId, `/api/admin/tenants/${selectedTenantId}/members/${userId}/role`, 'PATCH', { role });
   };
-  const confirmEmail = (userId) => doAction(userId, `/api/admin/platform/users/${userId}/confirm-email`);
-  const resetPassword = (userId) => doAction(userId, `/api/admin/platform/users/${userId}/reset-password`);
+  const confirmEmail = (userId) => doAction(userId, `/api/admin/platform/users/${userId}/confirm-email`, 'POST');
+  const resetPassword = (userId) => doAction(userId, `/api/admin/platform/users/${userId}/reset-password`, 'POST');
 
   const selectedTenant = tenants.find(t => t.id === selectedTenantId);
   const confirmed = members.filter(m => m.email_confirmed);
@@ -1218,7 +1687,7 @@ function UsersPanel({ session }) {
               return (
                 <div className="table-row" key={m.user_id}
                   style={{ gridTemplateColumns: '2fr 2fr 1fr 1fr auto', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 600 }}>
+                  <span onClick={() => setEditingUser(m)} style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--primary)' }}>
                     {m.full_name || m.email?.split('@')[0] || 'Sem nome'}
                   </span>
                   <span style={{ color: '#9AA2AE', fontSize: 12 }}>{m.email}</span>
@@ -1300,6 +1769,17 @@ function UsersPanel({ session }) {
           </div>
         ))}
       </div>
+
+      {editingUser && (
+        <UserModal
+          member={editingUser}
+          tenantId={selectedTenantId}
+          tenants={tenants}
+          onClose={() => setEditingUser(null)}
+          onSave={() => { setEditingUser(null); loadMembers(); }}
+          session={session}
+        />
+      )}
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, Plus, Mail, Trash2, X, CheckCircle2, Clock } from 'lucide-react';
+import { Shield, Plus, Mail, X, CheckCircle2, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const SuperAdminDashboard = () => {
@@ -13,6 +13,7 @@ const SuperAdminDashboard = () => {
   const [inviting, setInviting] = useState(false);
   const [lastInviteUrl, setLastInviteUrl] = useState('');
   const [activeTab, setActiveTab] = useState('admins');
+  const [editingAdmin, setEditingAdmin] = useState(null);
 
   // Buscar superadmins
   useEffect(() => {
@@ -205,6 +206,7 @@ const SuperAdminDashboard = () => {
                     key={admin.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
+                    onClick={() => setEditingAdmin(admin)}
                     style={{
                       padding: '16px',
                       background: 'rgba(255,255,255,0.02)',
@@ -213,7 +215,10 @@ const SuperAdminDashboard = () => {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
+                      cursor: 'pointer',
+                      transition: '0.15s',
                     }}
+                    whileHover={{ background: 'rgba(255,255,255,0.04)', scale: 1.005 }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{
@@ -229,34 +234,14 @@ const SuperAdminDashboard = () => {
                         {admin.email[0].toUpperCase()}
                       </div>
                       <div>
-                        <div style={{ fontWeight: '600', fontSize: '14px' }}>{admin.email}</div>
+                        <div style={{ fontWeight: '600', fontSize: '14px', color: '#FF6A3D' }}>{admin.email}</div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                           <CheckCircle2 size={12} style={{ marginRight: '4px', display: 'inline' }} />
                           Ativo desde {new Date(admin.created_at).toLocaleDateString('pt-BR')}
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleRemove(admin.id)}
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '8px',
-                        border: '1px solid rgba(255,68,102,0.2)',
-                        background: 'rgba(255,68,102,0.05)',
-                        color: '#ff6680',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: '0.15s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,68,102,0.12)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,68,102,0.05)'}
-                      title="Remover superadmin"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <span style={{ fontSize: '12px', color: '#9AA2AE', fontWeight: '500' }}>Gerenciar &rarr;</span>
                   </motion.div>
                 ))
               )}
@@ -472,6 +457,16 @@ const SuperAdminDashboard = () => {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {editingAdmin && (
+          <SuperAdminModal
+            admin={editingAdmin}
+            onClose={() => setEditingAdmin(null)}
+            onRemove={handleRemove}
+          />
+        )}
+      </AnimatePresence>
+
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
@@ -479,6 +474,111 @@ const SuperAdminDashboard = () => {
       `}</style>
     </div>
   );
+};
+
+function SuperAdminModal({ admin, onClose, onRemove }) {
+  const [removing, setRemoving] = useState(false);
+
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  const handleRemoveClick = async () => {
+    if (!window.confirm(`ATENÇÃO: A remoção do acesso de Superadmin é uma transação crítica. O usuário "${admin.email}" perderá IMEDIATAMENTE todos os privilégios administrativos globais e não poderá acessar este painel. Deseja continuar?`)) {
+      return;
+    }
+    setRemoving(true);
+    try {
+      await onRemove(admin.id);
+      onClose();
+    } catch (err) {
+      window.alert(err.message || 'Erro ao remover superadmin.');
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  return (
+    <motion.div
+      style={modalStyles.overlay}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={handleOverlayClick}
+    >
+      <motion.div
+        style={modalStyles.modal}
+        initial={{ scale: 0.92, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.92, y: 20 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={modalStyles.modalHeader}>
+          <div>
+            <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: 16, fontWeight: 700 }}>
+              Gerenciar Superadmin
+            </h3>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Privilégios Globais de Plataforma
+            </span>
+          </div>
+          <button style={modalStyles.iconBtn} onClick={onClose}>&times;</button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
+          <div style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: 2 }}>E-mail do Administrador</div>
+            <div style={{ fontWeight: '600', fontSize: '14px', color: '#FF6A3D' }}>{admin.email}</div>
+          </div>
+
+          <div style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: 2 }}>Membro Desde</div>
+            <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)' }}>
+              {new Date(admin.created_at).toLocaleString('pt-BR')}
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            <button type="button" style={modalStyles.btnDanger} onClick={handleRemoveClick} disabled={removing}>
+              {removing ? 'Removendo...' : 'Remover Privilégios'}
+            </button>
+            <button type="button" style={modalStyles.btnGhost} onClick={onClose}>Fechar</button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+const modalStyles = {
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+  },
+  modal: {
+    width: '100%', maxWidth: '420px', padding: '24px', borderRadius: '12px',
+    background: '#0E1116', border: '1px solid rgba(255,255,255,.08)',
+    boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)', boxSizing: 'border-box',
+    color: '#fff',
+  },
+  modalHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+    borderBottom: '1px solid rgba(255,255,255,.06)', paddingBottom: 12, marginBottom: 16,
+  },
+  iconBtn: {
+    background: 'none', border: 'none', color: '#9AA2AE', cursor: 'pointer', fontSize: 24,
+    lineHeight: '20px', padding: 0, outline: 'none',
+  },
+  btnDanger: {
+    background: 'rgba(255,77,106,.15)', border: '1px solid rgba(255,77,106,.25)',
+    color: '#ff4d6a', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600,
+  },
+  btnGhost: {
+    background: 'transparent', border: '1px solid rgba(255,255,255,.08)',
+    color: '#9AA2AE', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer',
+  }
 };
 
 export default SuperAdminDashboard;

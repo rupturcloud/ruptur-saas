@@ -20,7 +20,7 @@
  * independente dos atendentes nativos do UAZAPI.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PageHeader } from '../../ds/index.js';
+import { PageHeader, Modal } from '../../ds/index.js';
 import { inboxApi } from '../../api/inbox.api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useInboxBadge } from '../../contexts/InboxBadgeContext.jsx';
@@ -412,8 +412,12 @@ function lastMsgPreview(chat) {
 }
 
 function msgText(msg) {
+  if (typeof msg === 'string') return msg;
   if (typeof msg.message === 'string') return msg.message;
+  
   const m = msg.message || {};
+  const type = (msg.messageType || msg.type || '').toLowerCase();
+  
   const text = (
     m.conversation ||
     m.extendedTextMessage?.text ||
@@ -424,20 +428,23 @@ function msgText(msg) {
     m.buttonsResponseMessage?.selectedDisplayText ||
     m.listResponseMessage?.title ||
     msg.wa_lastMessageText ||
-    msg.text || msg.body || m.text || m.body ||
-    (msg.messageType === 'audioMessage' || msg.messageType === 'pttMessage' ? '🎤 Áudio' : '') ||
-    (msg.messageType === 'imageMessage' ? '📷 Imagem' : '') ||
-    (msg.messageType === 'videoMessage' ? '🎥 Vídeo' : '') ||
-    (msg.messageType === 'documentMessage' ? '📄 Documento' : '') ||
-    (msg.messageType === 'reactionMessage' ? '👍 Reação' : '') ||
-    (msg.messageType === 'protocolMessage' ? '🚫 Mensagem apagada' : '') ||
-    ''
+    msg.text || msg.body || msg.content || m.text || m.body || m.content
   );
-  if (!text) {
-    console.log('[DEBUG Inbox] Mensagem sem texto detectado:', msg);
-    return '[mensagem]';
-  }
-  return text;
+
+  if (text) return text;
+
+  if (type.includes('audio') || type.includes('ptt')) return '🎤 Áudio';
+  if (type.includes('image')) return '📷 Imagem';
+  if (type.includes('video')) return '🎥 Vídeo';
+  if (type.includes('document')) return '📄 Documento';
+  if (type.includes('sticker')) return '🖼️ Figuração';
+  if (type.includes('reaction')) return '👍 Reação';
+  if (type.includes('protocol') || type.includes('revoked')) return '🚫 Mensagem apagada';
+  if (type.includes('location')) return '📍 Localização';
+  if (type.includes('contact')) return '👤 Contato';
+
+  console.log('[DEBUG Inbox] Mensagem sem texto detectado:', msg);
+  return '📎 Mídia/Outro';
 }
 
 function isFromMe(msg) {
@@ -572,6 +579,71 @@ export default function Inbox() {
   const [feedback, setFeedback] = useState('');
   const [showPanel, setShowPanel] = useState(false);
   const [typingStatus, setTypingStatus] = useState(null);
+
+  // Nova conversa
+  const [openNewChat, setOpenNewChat] = useState(false);
+  const [newChatInput, setNewChatInput] = useState('');
+  const [crmContacts, setCrmContacts] = useState([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+
+  useEffect(() => {
+    if (openNewChat && user?.tenant_id) {
+      const fetchContacts = async () => {
+        setContactsLoading(true);
+        const { data } = await supabase
+          .from('crm_leads')
+          .select('id, name, phone')
+          .eq('tenant_id', user.tenant_id)
+          .not('phone', 'is', null)
+          .order('updated_at', { ascending: false })
+          .limit(100);
+        if (data) setCrmContacts(data);
+        setContactsLoading(false);
+      };
+      fetchContacts();
+    }
+  }, [openNewChat, user?.tenant_id]);
+
+  const filteredContacts = crmContacts.filter(c => {
+    if (!newChatInput) return true;
+    const q = newChatInput.toLowerCase();
+    return (c.name && c.name.toLowerCase().includes(q)) || (c.phone && c.phone.includes(q));
+  });
+
+  function handleStartNewChat(phoneStr) {
+    let inputToUse = typeof phoneStr === 'string' ? phoneStr : newChatInput;
+    if (!inputToUse) return;
+    
+    let phone = inputToUse.replace(/\D/g, '');
+    if (phone.length === 10 || phone.length === 11) {
+      phone = `55${phone}`; // Auto-add código Brasil
+    }
+    if (phone.length < 10) return;
+    
+    const chatId = `${phone}@s.whatsapp.net`;
+    const existing = chats.find(c => (c.wa_chatid === chatId || c.wa_fastid === chatId));
+    
+    if (existing) {
+      setActiveChat(existing);
+    } else {
+      const fakeChat = {
+        wa_chatid: chatId,
+        wa_isGroup: false,
+        name: phone,
+        wa_unreadCount: 0,
+        wa_lastMsgTimestamp: Math.floor(Date.now() / 1000)
+      };
+      setChats(prev => [fakeChat, ...prev]);
+      setActiveChat(fakeChat);
+    }
+    
+    setOpenNewChat(false);
+    setNewChatInput('');
+    
+    setTimeout(() => {
+      document.querySelector('.ibx-reply input')?.focus();
+    }, 100);
+  }
 
   // Busca CRM sempre que o chat ativo mudar
   useEffect(() => {
@@ -985,13 +1057,21 @@ export default function Inbox() {
 
         {/* ── 2. Lista de conversas ── */}
         <div className="ibx-list">
-          <div className="ibx-list-head">
-            <div className="ibx-search">
+          <div className="ibx-list-head" style={{ display: 'flex', gap: 8 }}>
+            <div className="ibx-search" style={{ flex: 1 }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ color: 'var(--ink-400)', flexShrink: 0 }}>
                 <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
               <input type="text" placeholder="Buscar conversa…" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
+            <button 
+              className="ibx-iconbtn" 
+              style={{ background: 'var(--brand-500)', color: '#fff', borderRadius: 9, flexShrink: 0 }}
+              onClick={() => setOpenNewChat(true)}
+              title="Nova conversa"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
           </div>
           <div className="ibx-chats">
             {instanceExpired && !chatsLoading && (
@@ -1153,6 +1233,65 @@ export default function Inbox() {
           </div>
         )}
       </div>
+
+      {openNewChat && (
+        <Modal title="Nova conversa" onClose={() => { setOpenNewChat(false); setNewChatInput(''); }} size="md">
+          <div style={{ padding: 20 }}>
+            <p style={{ fontSize: 13, color: 'var(--ink-600)', marginBottom: 15, lineHeight: 1.5 }}>
+              Busque por um contato existente ou digite o número do WhatsApp com DDD.
+            </p>
+            <input
+              type="text"
+              placeholder="Nome do contato ou telefone (Ex: 11999999999)"
+              value={newChatInput}
+              onChange={e => setNewChatInput(e.target.value)}
+              style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--ink-200)', fontSize: 14, outline: 'none' }}
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                   const digits = newChatInput.replace(/\D/g, '');
+                   if (digits.length >= 10) handleStartNewChat(digits);
+                }
+              }}
+            />
+            
+            <div style={{ marginTop: 15, maxHeight: 240, overflowY: 'auto', border: '1px solid var(--ink-100)', borderRadius: 8 }}>
+              {contactsLoading ? (
+                 <div style={{ padding: 15, textAlign: 'center', color: 'var(--ink-500)', fontSize: 13 }}>Buscando contatos...</div>
+              ) : filteredContacts.length === 0 ? (
+                 <div style={{ padding: 15, textAlign: 'center', color: 'var(--ink-500)', fontSize: 13 }}>
+                   {newChatInput ? 'Nenhum contato encontrado com essa busca.' : 'Nenhum contato com telefone salvo.'}
+                 </div>
+              ) : (
+                 filteredContacts.map(c => (
+                   <div 
+                     key={c.id} 
+                     onClick={() => handleStartNewChat(c.phone)}
+                     style={{ padding: '10px 14px', borderBottom: '1px solid var(--ink-100)', cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
+                     onMouseOver={e => e.currentTarget.style.background = 'var(--ink-50)'}
+                     onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                   >
+                     <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-900)' }}>{c.name || 'Sem nome'}</span>
+                     <span style={{ fontSize: 12, color: 'var(--ink-500)', fontFamily: 'ui-monospace, monospace' }}>{c.phone}</span>
+                   </div>
+                 ))
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+              <button className="ibx-act" style={{ width: 'auto' }} onClick={() => { setOpenNewChat(false); setNewChatInput(''); }}>Cancelar</button>
+              <button 
+                className="ibx-act primary" 
+                style={{ width: 'auto' }} 
+                onClick={() => handleStartNewChat(newChatInput.replace(/\D/g, ''))} 
+                disabled={newChatInput.replace(/\D/g, '').length < 10}
+              >
+                Iniciar com número
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

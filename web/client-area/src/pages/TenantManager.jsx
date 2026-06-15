@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Search, RefreshCw, X, Users, Loader2, Edit3, Trash2,
   CheckCircle, XCircle, UserPlus, UserMinus, Database,
@@ -31,40 +31,11 @@ const STATUS_COLOR = {
   pending:   { bg: 'rgba(255,106,61,.12)', color: '#FF6A3D', label: 'Pendente' },
 };
 
-const PLAN_COLOR = {
-  trial:    '#6B7280',
-  starter:  '#3B82F6',
-  pro:      '#8B5CF6',
-  business: '#F59E0B',
-  custom:   '#10B981',
-};
-
-function StatusBadge({ status }) {
-  const s = STATUS_COLOR[status] || STATUS_COLOR.pending;
-  return (
-    <span style={{
-      background: s.bg, color: s.color,
-      padding: '2px 8px', borderRadius: 6,
-      fontSize: 11, fontWeight: 700,
-    }}>{s.label}</span>
-  );
-}
-
-function PlanBadge({ plan }) {
-  return (
-    <span style={{
-      background: 'rgba(255,255,255,.06)',
-      color: PLAN_COLOR[plan] || '#9CA3AF',
-      padding: '2px 8px', borderRadius: 6,
-      fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
-    }}>{plan}</span>
-  );
-}
 
 // ─── Modal de criação/edição de tenant ───────────────────────────────────────
 function TenantModal({ tenant, onClose, onSave }) {
   const isEdit = !!tenant?.id;
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     slug:             tenant?.slug || '',
     name:             tenant?.name || '',
     email:            tenant?.email || '',
@@ -73,9 +44,38 @@ function TenantModal({ tenant, onClose, onSave }) {
     credits_balance:  tenant?.balance ?? 0,
     max_instances:    tenant?.maxInstances ?? 5,
     monthly_credits:  tenant?.monthly_credits ?? 0,
-  });
+  }));
+  const initialForm = useRef(form);
+
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(''); // 'saving' | 'saved' | 'error'
   const [err, setErr] = useState('');
+
+  // Autosave com debounce de 1.5s
+  useEffect(() => {
+    if (!isEdit) return;
+
+    const hasChanges = Object.keys(form).some(key => form[key] !== initialForm.current[key]);
+    if (!hasChanges) return;
+
+    setSaveStatus('saving');
+    const timer = setTimeout(async () => {
+      try {
+        await authFetch(`/api/admin/platform/tenants/${tenant.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(form),
+        });
+        initialForm.current = { ...form };
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus(''), 2000);
+      } catch (e) {
+        setSaveStatus('error');
+        setErr(e.message);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [form]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -96,14 +96,53 @@ function TenantModal({ tenant, onClose, onSave }) {
     }
   }
 
+  async function handleSuspend() {
+    if (!window.confirm(`Suspender tenant "${tenant.name}"?`)) return;
+    setSaving(true);
+    try {
+      await authFetch(`/api/admin/platform/tenants/${tenant.id}`, { method: 'DELETE' });
+      onSave();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleCancel() {
+    const hasChanges = Object.keys(form).some(key => form[key] !== initialForm.current[key]);
+    if (hasChanges) {
+      if (window.confirm('Você tem alterações não salvas. Deseja descartá-las?')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  }
+
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      handleCancel();
+    }
+  };
+
   return (
-    <div style={styles.overlay}>
+    <div style={styles.overlay} onClick={handleOverlayClick}>
       <div style={styles.modal}>
         <div style={styles.modalHeader}>
-          <h3 style={{ margin: 0, color: 'var(--text-main)' }}>
-            {isEdit ? `Editar — ${tenant.name}` : 'Novo Tenant'}
-          </h3>
-          <button style={styles.iconBtn} onClick={onClose}><X size={18} /></button>
+          <div>
+            <h3 style={{ margin: 0, color: 'var(--text-main)' }}>
+              {isEdit ? `Editar — ${tenant.name}` : 'Novo Tenant'}
+            </h3>
+            {isEdit && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                {saveStatus === 'saving' && '⏳ Salvando automaticamente...'}
+                {saveStatus === 'saved' && '✅ Todas as alterações salvas!'}
+                {saveStatus === 'error' && '❌ Erro ao salvar.'}
+              </span>
+            )}
+          </div>
+          <button style={styles.iconBtn} onClick={handleCancel}><X size={18} /></button>
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -161,12 +200,23 @@ function TenantModal({ tenant, onClose, onSave }) {
             </label>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 8 }}>
-            <button type="button" style={styles.btnGhost} onClick={onClose}>Cancelar</button>
-            <button type="submit" style={styles.btnPrimary} disabled={saving}>
-              {saving ? <Loader2 size={15} className="spin" /> : <CheckCircle size={15} />}
-              {isEdit ? 'Salvar alterações' : 'Criar tenant'}
-            </button>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', paddingTop: 8, alignItems: 'center' }}>
+            <div>
+              {isEdit && (
+                <button type="button" style={styles.btnDanger} onClick={handleSuspend} disabled={saving}>
+                  <Trash2 size={15} /> Suspender Tenant
+                </button>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" style={styles.btnGhost} onClick={handleCancel}>Cancelar</button>
+              {!isEdit && (
+                <button type="submit" style={styles.btnPrimary} disabled={saving}>
+                  {saving ? <Loader2 size={15} className="spin" /> : <CheckCircle size={15} />}
+                  Criar tenant
+                </button>
+              )}
+            </div>
           </div>
         </form>
       </div>
@@ -312,20 +362,25 @@ export default function TenantManager() {
     finally { setLoading(false); }
   }, []);
 
+  async function updateTenantInline(id, fields) {
+    try {
+      setTenants(prev => prev.map(t => t.id === id ? { ...t, ...fields } : t));
+      await authFetch(`/api/admin/platform/tenants/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(fields),
+      });
+    } catch (e) {
+      setErr(e.message);
+      load();
+    }
+  }
+
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(''); }, []);
   useEffect(() => {
     const t = setTimeout(() => load(search), 300);
     return () => clearTimeout(t);
   }, [search]);
-
-  async function suspend(t) {
-    if (!window.confirm(`Suspender tenant "${t.name}"?`)) return;
-    try {
-      await authFetch(`/api/admin/platform/tenants/${t.id}`, { method: 'DELETE' });
-      await load();
-    } catch (e) { setErr(e.message); }
-  }
 
   const onSave = () => { setModal(null); load(); };
 
@@ -406,15 +461,35 @@ export default function TenantManager() {
             borderBottom: '1px solid rgba(255,255,255,.04)',
             alignItems: 'center',
           }}>
-            <div>
+            <div style={{ cursor: 'pointer' }} onClick={() => setModal(t)}>
               <div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: 13 }}>{t.name}</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
                 /{t.slug}
               </div>
               {t.email && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.email}</div>}
             </div>
-            <span><PlanBadge plan={t.plan} /></span>
-            <span><StatusBadge status={t.status} /></span>
+            <span>
+              <select
+                value={t.plan}
+                onChange={(e) => updateTenantInline(t.id, { plan: e.target.value })}
+                style={styles.inlineSelect}
+              >
+                {PLANS.map(p => <option key={p} value={p}>{p.toUpperCase()}</option>)}
+              </select>
+            </span>
+            <span>
+              <select
+                value={t.status}
+                onChange={(e) => updateTenantInline(t.id, { status: e.target.value })}
+                style={{
+                  ...styles.inlineSelect,
+                  color: STATUS_COLOR[t.status]?.color || '#fff',
+                  fontWeight: 600,
+                }}
+              >
+                {STATUS.map(s => <option key={s} value={s}>{STATUS_COLOR[s]?.label || s}</option>)}
+              </select>
+            </span>
             <span style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
               {Number(t.balance || 0).toLocaleString('pt-BR')}
             </span>
@@ -435,16 +510,9 @@ export default function TenantManager() {
               ><Users size={14} /></button>
               <button
                 style={{ ...styles.iconBtn }}
-                title="Editar tenant"
+                title="Gerenciar tenant"
                 onClick={() => setModal(t)}
               ><Edit3 size={14} /></button>
-              {t.status !== 'suspended' && (
-                <button
-                  style={{ ...styles.iconBtn, color: '#ffaa00' }}
-                  title="Suspender tenant"
-                  onClick={() => suspend(t)}
-                ><Trash2 size={14} /></button>
-              )}
             </div>
           </div>
         ))}
@@ -522,5 +590,29 @@ const styles = {
     background: 'rgba(255,77,106,.12)', border: '1px solid rgba(255,77,106,.3)',
     color: '#ff4d6a', borderRadius: 8, padding: '10px 14px',
     fontSize: 13, marginBottom: 12,
+  },
+  inlineSelect: {
+    background: 'rgba(255,255,255,.03)',
+    border: '1px solid rgba(255,255,255,.08)',
+    borderRadius: 6,
+    color: 'var(--text-main)',
+    padding: '4px 6px',
+    fontSize: 12,
+    outline: 'none',
+    width: '100%',
+    cursor: 'pointer',
+  },
+  btnDanger: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    background: 'rgba(255,77,106,.15)',
+    border: '1px solid rgba(255,77,106,.25)',
+    color: '#ff4d6a',
+    borderRadius: 8,
+    padding: '8px 14px',
+    fontSize: 13,
+    cursor: 'pointer',
+    fontWeight: 600,
   },
 };
