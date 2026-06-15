@@ -145,10 +145,10 @@ describe('AnalyticsService', () => {
         })
         .mockReturnValueOnce({
           select: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({
-            data: { users: ['user1', 'user2'] },
+          eq: jest.fn().mockResolvedValue({
+            data: null,
             error: null,
+            count: 2,
           }),
         });
 
@@ -174,10 +174,10 @@ describe('AnalyticsService', () => {
         })
         .mockReturnValueOnce({
           select: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({
-            data: { users: ['user1'] },
+          eq: jest.fn().mockResolvedValue({
+            data: null,
             error: null,
+            count: 1,
           }),
         });
 
@@ -202,10 +202,10 @@ describe('AnalyticsService', () => {
         })
         .mockReturnValueOnce({
           select: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({
-            data: { users: ['user1'] },
+          eq: jest.fn().mockResolvedValue({
+            data: null,
             error: null,
+            count: 1,
           }),
         });
 
@@ -224,10 +224,10 @@ describe('AnalyticsService', () => {
         })
         .mockReturnValueOnce({
           select: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({
-            data: { users: [] },
+          eq: jest.fn().mockResolvedValue({
+            data: null,
             error: null,
+            count: 0,
           }),
         });
 
@@ -250,10 +250,10 @@ describe('AnalyticsService', () => {
         })
         .mockReturnValueOnce({
           select: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({
-            data: { users: [] },
+          eq: jest.fn().mockResolvedValue({
+            data: null,
             error: null,
+            count: 0,
           }),
         });
 
@@ -281,10 +281,10 @@ describe('AnalyticsService', () => {
         })
         .mockReturnValueOnce({
           select: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({
-            data: { users: [] },
+          eq: jest.fn().mockResolvedValue({
+            data: null,
             error: null,
+            count: 0,
           }),
         });
 
@@ -308,10 +308,10 @@ describe('AnalyticsService', () => {
         })
         .mockReturnValueOnce({
           select: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({
-            data: { users: ['user1', 'user2', 'user3', 'user4', 'user5'] },
+          eq: jest.fn().mockResolvedValue({
+            data: null,
             error: null,
+            count: 5,
           }),
         });
 
@@ -377,10 +377,10 @@ describe('AnalyticsService', () => {
         })
         .mockReturnValueOnce({
           select: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({
-            data: { users: [] },
+          eq: jest.fn().mockResolvedValue({
+            data: null,
             error: null,
+            count: 0,
           }),
         })
         .mockReturnValueOnce({

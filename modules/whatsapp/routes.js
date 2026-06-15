@@ -151,8 +151,21 @@ export async function registerWhatsappRoutes({ req, res, pathname, method, ctx }
 
 function buildController(ctx) {
   const repository = new WhatsappRepository({ supabase: ctx.supabase });
-  const adapter = new UazapiWhatsappAdapter(ctx.uazapiCredentials || {});
-  const service = new WhatsappService({ repository, adapter });
+  
+  // Cria uma factory de adapter que recebe serverUrl (do DB) e accountId
+  const adapterFactory = (serverUrl, accountId) => {
+    // Busca a conta exata na lista do contexto, ou usa a primeira/fallback
+    const account = (ctx.uazapiAccounts || []).find(a => a.id === accountId) 
+                 || (ctx.uazapiAccounts || [])[0] 
+                 || {};
+
+    return new UazapiWhatsappAdapter({
+      serverUrl: serverUrl || account.serverUrl || process.env.UAZAPI_BASE_URL,
+      adminToken: account.adminToken || process.env.UAZAPI_TOKEN || process.env.UAZAPI_ADMIN_TOKEN,
+    });
+  };
+
+  const service = new WhatsappService({ repository, adapterFactory });
   return new WhatsappController({ service });
 }
 

@@ -279,14 +279,13 @@ export class AnalyticsService {
           .eq('tenant_id', tenantId)
           .in('event_type', ['checkout_complete', 'upgrade']),
         this.supabase
-          .from('tenants')
-          .select('users', { count: 'exact' })
-          .eq('id', tenantId)
-          .single(),
+          .from('user_tenant_memberships')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenantId),
       ]);
 
       const { data: eventData, error: eventError } = eventsResult;
-      const { data: tenantData, error: tenantError } = tenantResult;
+      const { data: tenantData, error: tenantError, count: tenantCount } = tenantResult;
 
       if (eventError) throw eventError;
       if (tenantError) throw tenantError;
@@ -331,7 +330,7 @@ export class AnalyticsService {
         };
       }
 
-      const userCount = Math.max(tenantData?.users?.length || 1, 1);
+      const userCount = Math.max(tenantCount || 1, 1);
 
       return {
         tenantId,

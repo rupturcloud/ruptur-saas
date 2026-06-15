@@ -57,18 +57,9 @@ function Sidebar({ collapsed, onToggle, onSignOut }) {
 
   return (
     <aside
-      style={{
-        position: 'relative',
-        flexShrink: 0,
-        width: collapsed ? 56 : 240,
-        transition: 'width 0.2s ease',
-        background: '#0E1116',
-        borderRight: '1px solid rgba(255,255,255,0.06)',
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}
+      className={`relative shrink-0 transition-all duration-200 ease-in-out bg-[#0E1116] border-r border-white/5 flex flex-col overflow-hidden h-screen ${
+        collapsed ? 'w-14' : 'w-60'
+      } hidden md:flex`}
     >
       {/* Botão toggle collapse */}
       <button
@@ -421,9 +412,15 @@ function UserProfileRow({ userInitials, userName, planLabel, onClick }) {
 function Topbar() {
   const navigate = useNavigate();
   return (
-    <div className="topbar">
-      <TenantSwitcher />
-      <div className="input-search" style={{ flex: 1, maxWidth: 380 }}>
+    <div className="topbar flex items-center justify-between p-4 bg-white md:bg-transparent border-b border-gray-200 md:border-none">
+      <div className="md:hidden flex items-center gap-2">
+         {/* Hamburger menu for mobile could go here */}
+         <div className="w-8 h-8 rounded-md bg-[#FF6A3D] text-white flex items-center justify-center font-bold text-sm">R</div>
+      </div>
+      <div className="hidden md:block">
+        <TenantSwitcher />
+      </div>
+      <div className="input-search hidden md:flex" style={{ flex: 1, maxWidth: 380 }}>
         <Icon name="search" size={14} />
         <input className="input" placeholder="Buscar leads, contas, conversas…" />
       </div>
@@ -504,23 +501,9 @@ export default function AppShell() {
           onLeave={handleSignOut}
         />
       )}
-      <div
-        style={{
-          display: 'flex',
-          height: '100vh',
-          overflow: 'hidden',
-        }}
-      >
+      <div className="flex h-screen overflow-hidden bg-gray-50 flex-col md:flex-row">
         <Sidebar collapsed={collapsed} onToggle={toggleSidebar} onSignOut={handleSignOut} />
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            minWidth: 0,
-          }}
-        >
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
           <Topbar />
           <div
             className="page"

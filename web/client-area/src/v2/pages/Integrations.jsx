@@ -14,19 +14,7 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 // CSS inline — padrão do projeto (escopo via classes únicas)
 // ---------------------------------------------------------------------------
 const STYLES = `
-  .int-grid { display: flex; flex-direction: column; gap: 24px; max-width: 760px; }
-
-  .int-section-title {
-    font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
-    color: var(--ink-500); margin: 0 0 10px;
-  }
-
-  .int-card {
-    background: var(--ink-0);
-    border: 1px solid var(--ink-200);
-    border-radius: 14px;
-    overflow: hidden;
-  }
+  .int-card { background: var(--ink-0); border: 1px solid var(--ink-200); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; transition: all .15s; }
 
   .int-card-header {
     display: flex; align-items: center; gap: 12px;

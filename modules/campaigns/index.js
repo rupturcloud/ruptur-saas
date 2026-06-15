@@ -82,7 +82,8 @@ export class CampaignManager {
       type: meta.type || 'broadcast',
       status: toDomainStatus(row.status),
       settings: meta.settings || {
-        delayBetweenMessages: 5000,
+        delayMin: 3,
+        delayMax: 8,
         maxRetries: 3,
         scheduleType: row.scheduled_at ? 'scheduled' : 'immediate',
         scheduledAt: row.scheduled_at,
@@ -161,7 +162,8 @@ export class CampaignManager {
       type: campaignData.type || 'broadcast',
       status: 'draft',
       settings: {
-        delayBetweenMessages: campaignData.delayBetweenMessages || 5000,
+        delayMin: campaignData.delayMin || 3,
+        delayMax: campaignData.delayMax || 8,
         maxRetries: campaignData.maxRetries || 3,
         scheduleType: campaignData.scheduleType || 'immediate',
         scheduledAt: campaignData.scheduledAt || null,
@@ -397,7 +399,10 @@ export class CampaignManager {
       }
 
       if (this.sendingQueue.length > 0) {
-        await this.delay(item.campaign.settings.delayBetweenMessages, item.campaignId);
+        const min = item.campaign.settings.delayMin ?? 3;
+        const max = item.campaign.settings.delayMax ?? Math.max(8, min);
+        const randomSecs = Math.random() * (max - min) + min;
+        await this.delay(Math.round(randomSecs * 1000), item.campaignId);
       }
     }
 
@@ -715,7 +720,8 @@ export class CampaignManager {
       media: original.content.media,
       mediaType: original.content.mediaType,
       variables: original.content.variables,
-      delayBetweenMessages: original.settings.delayBetweenMessages,
+      delayMin: original.settings.delayMin,
+      delayMax: original.settings.delayMax,
       maxRetries: original.settings.maxRetries,
       scheduleType: original.settings.scheduleType,
       timezone: original.settings.timezone,

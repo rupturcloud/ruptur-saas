@@ -20,10 +20,11 @@
  * independente dos atendentes nativos do UAZAPI.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PageHeader } from '../../ds/index.js';
+import { PageHeader, Modal } from '../../ds/index.js';
 import { inboxApi } from '../../api/inbox.api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useInboxBadge } from '../../contexts/InboxBadgeContext.jsx';
+import { supabase } from '../../services/supabase.js';
 
 // ---------------------------------------------------------------------------
 // Estilos — escopo local, paleta V0 (var(--ink-*) clara + thread escuro WhatsApp)
@@ -367,14 +368,7 @@ const STYLES = `
 function fmtTime(ts) {
   if (!ts) return '';
   const ms = ts > 1e10 ? ts : ts * 1000;
-  const d = new Date(ms);
-  const now = new Date();
-  if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  }
-  const yest = new Date(now); yest.setDate(now.getDate() - 1);
-  if (d.toDateString() === yest.toDateString()) return 'Ontem';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  return new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
 function dayLabel(ts) {
@@ -418,22 +412,39 @@ function lastMsgPreview(chat) {
 }
 
 function msgText(msg) {
+  if (typeof msg === 'string') return msg;
+  if (typeof msg.message === 'string') return msg.message;
+  
   const m = msg.message || {};
-  return (
+  const type = (msg.messageType || msg.type || '').toLowerCase();
+  
+  const text = (
     m.conversation ||
     m.extendedTextMessage?.text ||
     m.imageMessage?.caption ||
     m.videoMessage?.caption ||
     m.documentMessage?.title ||
+    m.documentMessage?.fileName ||
     m.buttonsResponseMessage?.selectedDisplayText ||
     m.listResponseMessage?.title ||
     msg.wa_lastMessageText ||
-    (msg.messageType === 'audioMessage' || msg.messageType === 'pttMessage' ? '🎤 Áudio' : '') ||
-    (msg.messageType === 'imageMessage' ? '📷 Imagem' : '') ||
-    (msg.messageType === 'videoMessage' ? '🎥 Vídeo' : '') ||
-    (msg.messageType === 'documentMessage' ? '📄 Documento' : '') ||
-    '[mensagem]'
+    msg.text || msg.body || msg.content || m.text || m.body || m.content
   );
+
+  if (text) return text;
+
+  if (type.includes('audio') || type.includes('ptt')) return '🎤 Áudio';
+  if (type.includes('image')) return '📷 Imagem';
+  if (type.includes('video')) return '🎥 Vídeo';
+  if (type.includes('document')) return '📄 Documento';
+  if (type.includes('sticker')) return '🖼️ Figuração';
+  if (type.includes('reaction')) return '👍 Reação';
+  if (type.includes('protocol') || type.includes('revoked')) return '🚫 Mensagem apagada';
+  if (type.includes('location')) return '📍 Localização';
+  if (type.includes('contact')) return '👤 Contato';
+
+  console.log('[DEBUG Inbox] Mensagem sem texto detectado:', msg);
+  return '📎 Mídia/Outro';
 }
 
 function isFromMe(msg) {
@@ -503,10 +514,25 @@ function ChatRow({ chat, active, currentUserId, onClick }) {
 function Bubble({ msg }) {
   const sent = isFromMe(msg);
   const ts = msgTs(msg);
+  const status = msg.status; // sent, delivered, read
+
   return (
     <div className={`ibx-bubble ${sent ? 'sent' : 'received'}`}>
       <div>{msgText(msg)}</div>
-      {ts ? <div className="ts">{fmtTime(ts)}</div> : null}
+      {ts ? (
+        <div className="ts" style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+          {fmtTime(ts)}
+          {sent && status === 'sent' && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          )}
+          {sent && status === 'delivered' && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 6 7 17 2 12"></polyline><polyline points="22 6 11 17"></polyline></svg>
+          )}
+          {sent && status === 'read' && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2"><polyline points="18 6 7 17 2 12"></polyline><polyline points="22 6 11 17"></polyline></svg>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -544,14 +570,104 @@ export default function Inbox() {
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
 
-  // Painel do lead
-  const [showPanel, setShowPanel] = useState(true);
-  const [tagDraft, setTagDraft] = useState('');
+  // Painel do lead (CRM)
+  const [crmLead, setCrmLead] = useState(null);
+  const [crmOpp, setCrmOpp] = useState(null);
   const [savingLead, setSavingLead] = useState(false);
-  const [feedback, setFeedback] = useState('');
-
-  // Tempo real
+  const [tagDraft, setTagDraft] = useState('');
   const [sseLive, setSseLive] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [showPanel, setShowPanel] = useState(false);
+  const [typingStatus, setTypingStatus] = useState(null);
+
+  // Nova conversa
+  const [openNewChat, setOpenNewChat] = useState(false);
+  const [newChatInput, setNewChatInput] = useState('');
+  const [crmContacts, setCrmContacts] = useState([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+
+  useEffect(() => {
+    if (openNewChat && user?.tenant_id) {
+      const fetchContacts = async () => {
+        setContactsLoading(true);
+        const { data } = await supabase
+          .from('crm_leads')
+          .select('id, name, phone')
+          .eq('tenant_id', user.tenant_id)
+          .not('phone', 'is', null)
+          .order('updated_at', { ascending: false })
+          .limit(100);
+        if (data) setCrmContacts(data);
+        setContactsLoading(false);
+      };
+      fetchContacts();
+    }
+  }, [openNewChat, user?.tenant_id]);
+
+  const filteredContacts = crmContacts.filter(c => {
+    if (!newChatInput) return true;
+    const q = newChatInput.toLowerCase();
+    return (c.name && c.name.toLowerCase().includes(q)) || (c.phone && c.phone.includes(q));
+  });
+
+  function handleStartNewChat(phoneStr) {
+    let inputToUse = typeof phoneStr === 'string' ? phoneStr : newChatInput;
+    if (!inputToUse) return;
+    
+    let phone = inputToUse.replace(/\D/g, '');
+    if (phone.length === 10 || phone.length === 11) {
+      phone = `55${phone}`; // Auto-add código Brasil
+    }
+    if (phone.length < 10) return;
+    
+    const chatId = `${phone}@s.whatsapp.net`;
+    const existing = chats.find(c => (c.wa_chatid === chatId || c.wa_fastid === chatId));
+    
+    if (existing) {
+      setActiveChat(existing);
+    } else {
+      const fakeChat = {
+        wa_chatid: chatId,
+        wa_isGroup: false,
+        name: phone,
+        wa_unreadCount: 0,
+        wa_lastMsgTimestamp: Math.floor(Date.now() / 1000)
+      };
+      setChats(prev => [fakeChat, ...prev]);
+      setActiveChat(fakeChat);
+    }
+    
+    setOpenNewChat(false);
+    setNewChatInput('');
+    
+    setTimeout(() => {
+      document.querySelector('.ibx-reply input')?.focus();
+    }, 100);
+  }
+
+  // Busca CRM sempre que o chat ativo mudar
+  useEffect(() => {
+    if (!activeChat || !user?.tenant_id) {
+       // eslint-disable-next-line react-hooks/set-state-in-effect
+       setCrmLead(null);
+       // eslint-disable-next-line react-hooks/set-state-in-effect
+       setCrmOpp(null);
+       return;
+    }
+    const fetchCRM = async () => {
+      const cleanPhone = chatPhone(activeChat);
+      const { data: lead } = await supabase.from('crm_leads').select('*').eq('tenant_id', user.tenant_id).eq('phone', cleanPhone).maybeSingle();
+      if (lead) {
+        setCrmLead(lead);
+        const { data: opp } = await supabase.from('crm_opportunities').select('*').eq('tenant_id', user.tenant_id).eq('lead_id', lead.id).eq('status', 'OPEN').order('created_at', { ascending: false }).limit(1).maybeSingle();
+        setCrmOpp(opp);
+      } else {
+        setCrmLead(null);
+        setCrmOpp(null);
+      }
+    };
+    fetchCRM();
+  }, [activeChat, user?.tenant_id]);
 
   // Refs estáveis (evitam re-subscrição do SSE e closures velhos)
   const bottomRef = useRef(null);
@@ -580,6 +696,7 @@ export default function Inbox() {
     setActiveChat(null);
     setMessages([]);
     setActiveLabel(null);
+    setTypingStatus(null);
   }, []);
 
   const loadLabels = useCallback(async (key) => {
@@ -668,28 +785,96 @@ export default function Inbox() {
     if (!msgsLoading && messages.length > 0) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, msgsLoading]);
 
-  // SSE: tempo real com fallback no polling (refs mantêm a subscrição estável)
+  // Realtime Supabase: substitui o SSE vulnerável do UAZAPI por websockets nativos
   useEffect(() => {
     if (!instanceKey || !authReady) return;
-    let es; let refreshT;
-    const signal = () => {
-      clearTimeout(refreshT);
-      refreshT = setTimeout(() => {
-        reloadChatsRef.current?.(true);
-        const c = activeChatRef.current;
-        if (c) loadMessagesRef.current?.(c, true);
-      }, 1200);
+    let refreshT;
+    
+
+    const channel = supabase.channel(`uazapi_messages_${instanceKey}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'uazapi_messages', filter: `instance_id=eq.${instanceKey}` },
+        (payload) => {
+          setSseLive(true);
+          const active = activeChatRef.current;
+          
+          if (active && payload.new) {
+            const chatId = payload.new.chat_id;
+            if (chatId === (active.wa_chatid || active.wa_fastid)) {
+              if (payload.eventType === 'INSERT') {
+                const rowMsg = payload.new.raw_payload || { 
+                  key: { id: payload.new.message_id, fromMe: payload.new.direction === 'out' }, 
+                  message: { conversation: payload.new.body }, 
+                  messageTimestamp: Math.floor(new Date(payload.new.timestamp || Date.now()).getTime() / 1000), 
+                  status: payload.new.status 
+                };
+                rowMsg.status = payload.new.status || rowMsg.status;
+
+                setMessages(prev => {
+                  const id = msgId(rowMsg);
+                  if (id) {
+                    const idx = prev.findIndex(m => msgId(m) === id);
+                    if (idx >= 0) {
+                      const next = [...prev];
+                      next[idx] = { ...next[idx], ...rowMsg, status: rowMsg.status || next[idx].status };
+                      return next;
+                    }
+                  }
+                  return [...prev, rowMsg];
+                });
+              } else if (payload.eventType === 'UPDATE') {
+                setMessages(prev => {
+                  const idx = prev.findIndex(m => msgId(m) === payload.new.message_id);
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = { ...next[idx], status: payload.new.status };
+                    return next;
+                  }
+                  return prev;
+                });
+              }
+            }
+          }
+
+          // Atualiza lista de chats com debounce
+          clearTimeout(refreshT);
+          refreshT = setTimeout(() => {
+            reloadChatsRef.current?.(true);
+          }, 800);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'uazapi_events', filter: `instance_id=eq.${instanceKey}` },
+        (payload) => {
+          if (payload.new.event_type?.includes('presence')) {
+            const data = payload.new.payload?.data || payload.new.payload || {};
+            const jid = data.id || data.remoteJid;
+            const presence = data.presence || data.state;
+            const active = activeChatRef.current;
+            if (active && (active.wa_chatid === jid || active.wa_fastid === jid)) {
+               if (presence === 'composing' || presence === 'recording') {
+                 setTypingStatus(presence);
+                 clearTimeout(window.typingTimeout);
+                 window.typingTimeout = setTimeout(() => setTypingStatus(null), 3000);
+               } else {
+                 setTypingStatus(null);
+               }
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setSseLive(true);
+        if (status === 'CHANNEL_ERROR' || status === 'CLOSED') setSseLive(false);
+      });
+
+    return () => { 
+      clearTimeout(refreshT); 
+      setSseLive(false); 
+      supabase.removeChannel(channel);
     };
-    try {
-      es = new EventSource(inboxApi.sseUrl(instanceKey));
-      es.onopen = () => setSseLive(true);
-      es.onerror = () => setSseLive(false);
-      es.addEventListener('messages', signal);
-      es.addEventListener('messages_update', signal);
-    } catch (e) {
-      console.warn('[Inbox] SSE indisponível, usando polling:', e.message);
-    }
-    return () => { clearTimeout(refreshT); setSseLive(false); try { es?.close(); } catch { /* noop */ } };
   }, [instanceKey, authReady]);
 
   // Feedback some sozinho
@@ -709,10 +894,10 @@ export default function Inbox() {
   const activeName = activeChat ? chatName(activeChat) : null;
   const activePhone = activeChat ? chatPhone(activeChat) : null;
   const activeIsGroup = activeChat?.wa_isGroup === true;
-  const activeTags = normalizeTags(activeChat?.lead_tags);
-  const activeAssignedMe = activeChat?.lead_assignedAttendant_id && activeChat.lead_assignedAttendant_id === userId;
-  const activeAssignedOther = activeChat?.lead_assignedAttendant_id && activeChat.lead_assignedAttendant_id !== userId;
-  const ticketOpen = activeChat?.lead_isTicketOpen === true;
+  const activeTags = crmLead?.tags || [];
+  const activeAssignedMe = crmLead?.assigned_user_id === user?.id;
+  const activeAssignedOther = crmLead?.assigned_user_id && crmLead.assigned_user_id !== user?.id;
+  const ticketOpen = crmOpp?.status === 'OPEN';
 
   // -- Ações ----------------------------------------------------------------
   async function handleSend() {
@@ -737,38 +922,55 @@ export default function Inbox() {
     }
   }
 
-  /** Aplica campos de lead via editLead, atualiza chat ativo e lista */
-  async function patchLead(fields, okMsg) {
-    if (!instanceKey || !activeChat) return;
-    const chatId = activeChat.wa_chatid || activeChat.wa_fastid;
-    if (!chatId) return;
+  /** Aplica campos de lead diretamente no CRM (Supabase) */
+  async function patchCRMLead(fields, okMsg) {
+    if (!crmLead) return;
     setSavingLead(true);
     try {
-      await inboxApi.editLead(instanceKey, chatId, fields);
-      setActiveChat(prev => (prev ? { ...prev, ...fields } : prev));
-      setChats(prev => prev.map(c => ((c.wa_chatid || c.wa_fastid) === chatId ? { ...c, ...fields } : c)));
+      const { data, error } = await supabase.from('crm_leads').update(fields).eq('id', crmLead.id).select().single();
+      if (error) throw error;
+      setCrmLead(data);
       if (okMsg) setFeedback(okMsg);
-      reloadChats(true);
     } catch (e) {
-      console.warn('[Inbox] editLead falhou:', e.message);
-      setFeedback('Não foi possível salvar.');
+      console.warn('[Inbox] patchCRMLead falhou:', e.message);
+      setFeedback('Não foi possível salvar no CRM.');
     } finally {
       setSavingLead(false);
     }
   }
 
-  const assignToMe = () => patchLead({ lead_assignedAttendant_id: userId }, 'Atribuído a você.');
-  const unassign = () => patchLead({ lead_assignedAttendant_id: '' }, 'Atribuição removida.');
-  const toggleTicket = () => patchLead({ lead_isTicketOpen: !ticketOpen }, ticketOpen ? 'Ticket fechado.' : 'Ticket reaberto.');
+  async function toggleCRMTicket() {
+    if (!crmOpp) {
+       setFeedback('Nenhum ticket aberto para alterar.');
+       return;
+    }
+    setSavingLead(true);
+    try {
+      const newStatus = crmOpp.status === 'OPEN' ? 'CLOSED' : 'OPEN';
+      const { data, error } = await supabase.from('crm_opportunities').update({ status: newStatus }).eq('id', crmOpp.id).select().single();
+      if (error) throw error;
+      setCrmOpp(data);
+      setFeedback(newStatus === 'OPEN' ? 'Ticket reaberto.' : 'Ticket fechado.');
+    } catch(e) {
+      console.warn('[Inbox] toggleCRMTicket falhou:', e.message);
+      setFeedback('Erro ao alterar ticket no CRM.');
+    } finally {
+      setSavingLead(false);
+    }
+  }
+
+  const assignToMe = () => patchCRMLead({ assigned_user_id: user.id }, 'Atribuído a você.');
+  const unassign = () => patchCRMLead({ assigned_user_id: null }, 'Atribuição removida.');
+  const toggleTicket = toggleCRMTicket;
 
   function addTag() {
     const t = tagDraft.trim();
     if (!t) return;
     if (activeTags.includes(t)) { setTagDraft(''); return; }
-    patchLead({ lead_tags: [...activeTags, t] }, 'Etiqueta adicionada.');
+    patchCRMLead({ tags: [...activeTags, t] }, 'Etiqueta adicionada.');
     setTagDraft('');
   }
-  const removeTag = (t) => patchLead({ lead_tags: activeTags.filter(x => x !== t) }, 'Etiqueta removida.');
+  const removeTag = (t) => patchCRMLead({ tags: activeTags.filter(x => x !== t) }, 'Etiqueta removida.');
 
   // -- Render: agrupa mensagens por dia para separadores --------------------
   const rendered = [];
@@ -855,13 +1057,21 @@ export default function Inbox() {
 
         {/* ── 2. Lista de conversas ── */}
         <div className="ibx-list">
-          <div className="ibx-list-head">
-            <div className="ibx-search">
+          <div className="ibx-list-head" style={{ display: 'flex', gap: 8 }}>
+            <div className="ibx-search" style={{ flex: 1 }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" style={{ color: 'var(--ink-400)', flexShrink: 0 }}>
                 <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
               <input type="text" placeholder="Buscar conversa…" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
+            <button 
+              className="ibx-iconbtn" 
+              style={{ background: 'var(--brand-500)', color: '#fff', borderRadius: 9, flexShrink: 0 }}
+              onClick={() => setOpenNewChat(true)}
+              title="Nova conversa"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
           </div>
           <div className="ibx-chats">
             {instanceExpired && !chatsLoading && (
@@ -909,7 +1119,17 @@ export default function Inbox() {
                 <div className={`ibx-ava${activeIsGroup ? ' group' : ''}`}>{activeIsGroup ? '👥' : initials(activeName)}</div>
                 <div className="meta">
                   <div className="name">{activeName}</div>
-                  {activePhone && <div className="phone">{activePhone}</div>}
+                  {activePhone && (
+                    <div className="phone">
+                      {typingStatus === 'recording' ? (
+                        <span style={{ color: '#29C467', fontWeight: 600 }}>gravando áudio...</span>
+                      ) : typingStatus === 'composing' ? (
+                        <span style={{ color: '#29C467', fontWeight: 600 }}>digitando...</span>
+                      ) : (
+                        activePhone
+                      )}
+                    </div>
+                  )}
                 </div>
                 <button
                   className={`ibx-iconbtn${showPanel ? ' on' : ''}`}
@@ -1013,6 +1233,65 @@ export default function Inbox() {
           </div>
         )}
       </div>
+
+      {openNewChat && (
+        <Modal title="Nova conversa" onClose={() => { setOpenNewChat(false); setNewChatInput(''); }} size="md">
+          <div style={{ padding: 20 }}>
+            <p style={{ fontSize: 13, color: 'var(--ink-600)', marginBottom: 15, lineHeight: 1.5 }}>
+              Busque por um contato existente ou digite o número do WhatsApp com DDD.
+            </p>
+            <input
+              type="text"
+              placeholder="Nome do contato ou telefone (Ex: 11999999999)"
+              value={newChatInput}
+              onChange={e => setNewChatInput(e.target.value)}
+              style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--ink-200)', fontSize: 14, outline: 'none' }}
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                   const digits = newChatInput.replace(/\D/g, '');
+                   if (digits.length >= 10) handleStartNewChat(digits);
+                }
+              }}
+            />
+            
+            <div style={{ marginTop: 15, maxHeight: 240, overflowY: 'auto', border: '1px solid var(--ink-100)', borderRadius: 8 }}>
+              {contactsLoading ? (
+                 <div style={{ padding: 15, textAlign: 'center', color: 'var(--ink-500)', fontSize: 13 }}>Buscando contatos...</div>
+              ) : filteredContacts.length === 0 ? (
+                 <div style={{ padding: 15, textAlign: 'center', color: 'var(--ink-500)', fontSize: 13 }}>
+                   {newChatInput ? 'Nenhum contato encontrado com essa busca.' : 'Nenhum contato com telefone salvo.'}
+                 </div>
+              ) : (
+                 filteredContacts.map(c => (
+                   <div 
+                     key={c.id} 
+                     onClick={() => handleStartNewChat(c.phone)}
+                     style={{ padding: '10px 14px', borderBottom: '1px solid var(--ink-100)', cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
+                     onMouseOver={e => e.currentTarget.style.background = 'var(--ink-50)'}
+                     onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                   >
+                     <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-900)' }}>{c.name || 'Sem nome'}</span>
+                     <span style={{ fontSize: 12, color: 'var(--ink-500)', fontFamily: 'ui-monospace, monospace' }}>{c.phone}</span>
+                   </div>
+                 ))
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+              <button className="ibx-act" style={{ width: 'auto' }} onClick={() => { setOpenNewChat(false); setNewChatInput(''); }}>Cancelar</button>
+              <button 
+                className="ibx-act primary" 
+                style={{ width: 'auto' }} 
+                onClick={() => handleStartNewChat(newChatInput.replace(/\D/g, ''))} 
+                disabled={newChatInput.replace(/\D/g, '').length < 10}
+              >
+                Iniciar com número
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

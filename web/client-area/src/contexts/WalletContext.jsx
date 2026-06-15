@@ -22,7 +22,7 @@ export function WalletProvider({ children }) {
     if (!tenantId) return;
     setLoading(true);
     try {
-      const data = await authFetch(`/api/wallet?tenantId=${tenantId}`);
+      const data = await authFetch(`/api/wallet/balance?tenantId=${tenantId}`);
       setBalance(data.balance ?? 0);
       setTransactions(data.transactions ?? []);
     } catch (err) {

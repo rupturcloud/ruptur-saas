@@ -20,6 +20,9 @@
  *   5. Retornar sempre HTTP 200 (UAZAPI retenta se não receber 200)
  */
 
+import { decryptSecret } from '../modules/providers/uazapi-account.service.js';
+import { handleIncomingMessageCRM } from '../modules/crm-core/lead.service.js';
+
 /**
  * Resolver tenant_id a partir do instance_id UAZAPI.
  * O campo remote_instance_id em instance_registry armazena o ID externo da instância.
@@ -119,6 +122,16 @@ async function handleMessages(supabase, instanceId, tenantId, data) {
     console.error('[UAZAPI webhook] erro ao salvar mensagem:', error.message);
     return false;
   }
+
+  // Aciona auto-creation de Lead e Opportunity no CRM
+  if (chatId) {
+    const pushName = data?.pushName || 'Contato WhatsApp';
+    // fire-and-forget
+    handleIncomingMessageCRM(supabase, tenantId, chatId, pushName).catch(e => {
+      console.error('[CRM Core] Erro background:', e.message);
+    });
+  }
+
   return true;
 }
 

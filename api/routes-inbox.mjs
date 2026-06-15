@@ -33,6 +33,7 @@
 
 import { decryptSecret } from '../modules/providers/uazapi-account.service.js';
 import { createUazapiAdapter } from '../modules/provider-adapter/uazapi-adapter.js';
+import { getDefaultTenantForUser } from '../middleware/tenant-security.mjs';
 
 // ─── Helper: resolve instância por tenant isolation ────────────────────────────
 /**
@@ -444,14 +445,9 @@ export async function handleSSERelay(req, res, supabase, extractUser) {
   if (authErr || !user) { res.writeHead(401); return res.end('Unauthorized'); }
 
   // Resolver tenant
-  const { data: membership } = await supabase
-    .from('user_tenant_memberships')
-    .select('tenant_id')
-    .eq('user_id', user.id)
-    .maybeSingle();
-  if (!membership) { res.writeHead(403); return res.end('Forbidden'); }
+  const tenantId = await getDefaultTenantForUser(user, supabase);
+  if (!tenantId) { res.writeHead(403); return res.end('Forbidden'); }
 
-  const tenantId = membership.tenant_id;
   const instanceKey = req.params?.instanceKey;
   if (!instanceKey) { res.writeHead(400); return res.end('instanceKey obrigatório'); }
 

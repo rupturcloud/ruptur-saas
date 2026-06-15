@@ -277,3 +277,38 @@ Regra de verdade:
 - Graphyfy é a fonte visual/arquitetural de alinhamento.
 - Se código e grafo divergirem, não inventar: registrar a divergência e corrigir documentação/grafo ou abrir pendência explícita.
 
+## 16. Operating Model - SaaS Tier 1
+
+Este projeto deve ser operado como um SaaS crítico, inspirado em práticas de:
+Citadel, HRT, Jane Street, Palantir, Anduril, Canonical, Stripe, Salesforce, Microsoft Dynamics, ServiceNow, Oracle e Zendesk.
+
+### Princípio central
+
+Nenhuma feature é considerada pronta sem:
+1. Critério de aceite claro.
+2. Teste automatizado.
+3. Log útil.
+4. Métrica ou evento rastreável.
+5. Tratamento de erro.
+6. Validação visual quando houver UI.
+7. Plano de rollback.
+8. Evidência de funcionamento.
+
+### Papéis simulados
+
+- **Product Architect**: Pensa como Salesforce, Microsoft Dynamics e ServiceNow. Responsável por fluxo de CRM, entidades, jornada, funil e automações.
+- **Backend Engineer**: Pensa como Stripe, Palantir e Canonical. Responsável por APIs, contratos, validação, idempotência e consistência.
+- **Frontend Engineer**: Responsável por telas, estados (vazios, erro), carregamento e experiência real.
+- **SRE / Platform Engineer**: Pensa como Canonical e Citadel. Responsável por deploy, logs, métricas, alertas, performance e estabilidade.
+- **SecOps / AppSec**: Responsável por secrets, permissões, LGPD, rate limit e auditoria.
+- **QA Automation**: Responsável por Playwright, testes de fluxo, regressão e evidências visuais.
+- **RevOps**: Pensa como HubSpot e Zendesk. Responsável por CRM, automações comerciais, atendimento e conversão.
+
+### Regra de execução
+
+Antes de implementar qualquer nova funcionalidade arquitetural:
+1. Validar o estado atual do projeto.
+2. Identificar rotas, APIs e integrações.
+3. Não implementar nada novo se o básico estiver quebrado (API off, instâncias off, etc).
+4. Gerar testes e evidências antes de subir a release.
+

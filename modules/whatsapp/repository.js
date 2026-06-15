@@ -67,7 +67,7 @@ export class WhatsappRepository {
       .from('instance_registry')
       .select(`
         *,
-        provider_accounts ( account_kind ),
+        provider_accounts ( id, account_kind, server_url ),
         tenant_providers!inner ( id, tenant_id, provider, account_id, credentials_ref )
       `)
       .eq('id', id)

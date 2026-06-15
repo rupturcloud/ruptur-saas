@@ -293,8 +293,8 @@ export function AuthProvider({ children }) {
   // encontrem os headers na primeira chamada.
   if (typeof window !== 'undefined') {
     const token = session?.access_token || null;
-    window.__ruptur = window.__ruptur || {};
-    window.__ruptur.auth = token ? { token, tenantId } : null;
+    Object.assign(window, { __ruptur: window.__ruptur || {} });
+    Object.assign(window.__ruptur, { auth: token ? { token, tenantId } : null });
   }
 
   const value = {

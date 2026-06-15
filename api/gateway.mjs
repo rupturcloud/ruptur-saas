@@ -244,7 +244,7 @@ const SECURITY_HEADERS = {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' https://fonts.gstatic.com data:; " +
     "img-src 'self' data: blob: https:; " +
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.uazapi.com https://*.sentry.io https://api.ruptur.cloud; " +
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.uazapi.com https://*.sentry.io https://api.ruptur.cloud https://fonts.googleapis.com; " +
     "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
 };
 
@@ -1714,6 +1714,274 @@ async function handler(req, res) {
     }
   }
 
+  // --- Admin: Atualizar dados de usuário (Nome, E-mail) ---
+  const userUpdateMatch = pathname.match(/^\/api\/admin\/platform\/users\/([a-f0-9-]{36})$/);
+  if (userUpdateMatch && req.method === 'PATCH') {
+    const adminUser = await requirePlatformAdmin(req, res);
+    if (!adminUser) return;
+    const userId = userUpdateMatch[1];
+    try {
+      const body = await parseBody(req);
+      const { email, fullName, role } = body;
+
+      const updates = {};
+      if (email !== undefined) updates.email = email;
+      if (fullName !== undefined) updates.user_metadata = { full_name: fullName };
+
+      // 1. Atualizar no Auth se tiver campos de auth
+      if (Object.keys(updates).length > 0) {
+        const { error: authErr } = await supabase.auth.admin.updateUserById(userId, updates);
+        if (authErr) throw authErr;
+      }
+
+      // 2. Atualizar na tabela users
+      const dbUpdates = {};
+      if (email !== undefined) dbUpdates.email = email;
+      if (fullName !== undefined) dbUpdates.full_name = fullName;
+      if (role !== undefined) dbUpdates.role = role;
+
+      if (Object.keys(dbUpdates).length > 0) {
+        const { error: dbErr } = await supabase
+          .from('users')
+          .update(dbUpdates)
+          .eq('id', userId);
+        if (dbErr) throw dbErr;
+      }
+
+      log('info', '[Admin] usuário atualizado', { userId, dbUpdates, by: adminUser.id });
+      return json(res, 200, { ok: true }, req);
+    } catch (e) {
+      return json(res, 500, { error: e.message }, req);
+    }
+  }
+
+  // --- Admin: Mover usuário de tenant ---
+  const userMoveMatch = pathname.match(/^\/api\/admin\/platform\/users\/([a-f0-9-]{36})\/move$/);
+  if (userMoveMatch && req.method === 'POST') {
+    const adminUser = await requirePlatformAdmin(req, res);
+    if (!adminUser) return;
+    const userId = userMoveMatch[1];
+    try {
+      const body = await parseBody(req);
+      const { targetTenantId } = body;
+      if (!targetTenantId) return json(res, 400, { error: 'targetTenantId é obrigatório' }, req);
+
+      // Obter tenant antigo
+      const { data: userProfile, error: getErr } = await supabase
+        .from('users')
+        .select('tenant_id, email')
+        .eq('id', userId)
+        .single();
+      if (getErr || !userProfile) return json(res, 404, { error: 'Usuário não encontrado na tabela users' }, req);
+      const oldTenantId = userProfile.tenant_id;
+
+      // 1. Atualizar tenant_id na tabela users
+      const { error: userUpdateErr } = await supabase
+        .from('users')
+        .update({ tenant_id: targetTenantId })
+        .eq('id', userId);
+      if (userUpdateErr) throw userUpdateErr;
+
+      // 2. Atualizar tenant_id na tabela user_tenant_memberships
+      // Verificar se já existe afiliação do usuário no tenant de destino
+      const { data: targetMembership } = await supabase
+        .from('user_tenant_memberships')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('tenant_id', targetTenantId)
+        .single();
+
+      if (targetMembership) {
+        // Se já existe, apenas deleta a antiga
+        await supabase
+          .from('user_tenant_memberships')
+          .delete()
+          .eq('user_id', userId)
+          .eq('tenant_id', oldTenantId);
+      } else {
+        // Senão, altera a antiga
+        const { error: memberUpdateErr } = await supabase
+          .from('user_tenant_memberships')
+          .update({ tenant_id: targetTenantId })
+          .eq('user_id', userId)
+          .eq('tenant_id', oldTenantId);
+        if (memberUpdateErr) throw memberUpdateErr;
+      }
+
+      // 3. Registrar audit_logs para ambos os tenants
+      if (oldTenantId) {
+        await supabase.from('audit_logs').insert({
+          tenant_id: oldTenantId,
+          user_id: adminUser.id,
+          action: 'member_moved_out',
+          resource: 'user',
+          resource_id: userId,
+          details: { targetTenantId, email: userProfile.email },
+        });
+      }
+      await supabase.from('audit_logs').insert({
+        tenant_id: targetTenantId,
+        user_id: adminUser.id,
+        action: 'member_moved_in',
+        resource: 'user',
+        resource_id: userId,
+        details: { sourceTenantId: oldTenantId, email: userProfile.email },
+      });
+
+      log('info', '[Admin] usuário movido de tenant', { userId, oldTenantId, targetTenantId, by: adminUser.id });
+      return json(res, 200, { ok: true }, req);
+    } catch (e) {
+      return json(res, 500, { error: e.message }, req);
+    }
+  }
+
+  // --- Admin: Atualizar instância gerenciada (renomear) ---
+  const instanceUpdatePlatMatch = pathname.match(/^\/api\/admin\/platform\/instances\/([a-f0-9-]{36})$/);
+  if (instanceUpdatePlatMatch && req.method === 'PATCH') {
+    const adminUser = await requirePlatformAdmin(req, res);
+    if (!adminUser) return;
+    const instanceId = instanceUpdatePlatMatch[1];
+    try {
+      const body = await parseBody(req);
+      const { name } = body;
+
+      const { error } = await supabase
+        .from('instance_registry')
+        .update({ instance_name: name })
+        .eq('id', instanceId);
+      if (error) throw error;
+
+      log('info', '[Admin] instância gerenciada atualizada', { instanceId, name, by: adminUser.id });
+      return json(res, 200, { ok: true }, req);
+    } catch (e) {
+      return json(res, 500, { error: e.message }, req);
+    }
+  }
+
+  // --- Admin: Remover/Excluir instância gerenciada ---
+  if (instanceUpdatePlatMatch && req.method === 'DELETE') {
+    const adminUser = await requirePlatformAdmin(req, res);
+    if (!adminUser) return;
+    const instanceId = instanceUpdatePlatMatch[1];
+    try {
+      // 1. Obter detalhes da instância antes de excluir para o log
+      const { data: instance, error: getErr } = await supabase
+        .from('instance_registry')
+        .select('remote_instance_id, tenant_provider_id, tenant_providers(tenant_id)')
+        .eq('id', instanceId)
+        .single();
+      if (getErr || !instance) return json(res, 404, { error: 'Instância não encontrada' }, req);
+      const tenantId = instance.tenant_providers?.tenant_id;
+
+      // 2. Excluir a instância
+      const { error: delErr } = await supabase
+        .from('instance_registry')
+        .delete()
+        .eq('id', instanceId);
+      if (delErr) throw delErr;
+
+      // 3. Registrar audit_log
+      if (tenantId) {
+        await supabase.from('audit_logs').insert({
+          tenant_id: tenantId,
+          user_id: adminUser.id,
+          action: 'instance_deleted',
+          resource: 'instance',
+          resource_id: instanceId,
+          details: { remoteInstanceId: instance.remote_instance_id },
+        });
+      }
+
+      log('info', '[Admin] instância gerenciada excluída', { instanceId, tenantId, by: adminUser.id });
+      return json(res, 200, { ok: true }, req);
+    } catch (e) {
+      return json(res, 500, { error: e.message }, req);
+    }
+  }
+
+  // --- Admin: Mover instância gerenciada de tenant ---
+  const instanceMoveMatch = pathname.match(/^\/api\/admin\/platform\/instances\/([a-f0-9-]{36})\/move$/);
+  if (instanceMoveMatch && req.method === 'POST') {
+    const adminUser = await requirePlatformAdmin(req, res);
+    if (!adminUser) return;
+    const instanceId = instanceMoveMatch[1];
+    try {
+      const body = await parseBody(req);
+      const { targetTenantId } = body;
+      if (!targetTenantId) return json(res, 400, { error: 'targetTenantId é obrigatório' }, req);
+
+      // 1. Obter instância e provider atual
+      const { data: instance, error: getErr } = await supabase
+        .from('instance_registry')
+        .select('id, remote_instance_id, tenant_provider_id, tenant_providers(*)')
+        .eq('id', instanceId)
+        .single();
+      if (getErr || !instance) return json(res, 404, { error: 'Instância não encontrada' }, req);
+
+      const currentProvider = instance.tenant_providers;
+      const oldTenantId = currentProvider.tenant_id;
+
+      // 2. Buscar se o tenant de destino tem um tenant_providers correspondente
+      let { data: targetProvider, error: pErr } = await supabase
+        .from('tenant_providers')
+        .select('id')
+        .eq('tenant_id', targetTenantId)
+        .eq('provider', currentProvider.provider)
+        .eq('account_id', currentProvider.account_id || '')
+        .single();
+
+      if (pErr || !targetProvider) {
+        // Se não tiver, cria um clone para o tenant de destino
+        const { data: newProvider, error: insertPErr } = await supabase
+          .from('tenant_providers')
+          .insert({
+            tenant_id: targetTenantId,
+            provider: currentProvider.provider,
+            account_id: currentProvider.account_id,
+            credentials_ref: currentProvider.credentials_ref,
+            metadata: currentProvider.metadata || {},
+            is_active: currentProvider.is_active,
+          })
+          .select('id')
+          .single();
+        if (insertPErr) throw insertPErr;
+        targetProvider = newProvider;
+      }
+
+      // 3. Atualizar o tenant_provider_id da instância
+      const { error: updateErr } = await supabase
+        .from('instance_registry')
+        .update({ tenant_provider_id: targetProvider.id })
+        .eq('id', instanceId);
+      if (updateErr) throw updateErr;
+
+      // 4. Gravar audit_logs
+      if (oldTenantId) {
+        await supabase.from('audit_logs').insert({
+          tenant_id: oldTenantId,
+          user_id: adminUser.id,
+          action: 'instance_moved_out',
+          resource: 'instance',
+          resource_id: instanceId,
+          details: { targetTenantId, remoteInstanceId: instance.remote_instance_id },
+        });
+      }
+      await supabase.from('audit_logs').insert({
+        tenant_id: targetTenantId,
+        user_id: adminUser.id,
+        action: 'instance_moved_in',
+        resource: 'instance',
+        resource_id: instanceId,
+        details: { sourceTenantId: oldTenantId, remoteInstanceId: instance.remote_instance_id },
+      });
+
+      log('info', '[Admin] instância movida de tenant', { instanceId, oldTenantId, targetTenantId, by: adminUser.id });
+      return json(res, 200, { ok: true }, req);
+    } catch (e) {
+      return json(res, 500, { error: e.message }, req);
+    }
+  }
+
   // --- Admin: Estatísticas operacionais ---
   if (pathname === '/api/admin/stats' && req.method === 'GET') {
     const adminUser = await requirePlatformAdmin(req, res);
@@ -2418,7 +2686,7 @@ async function handler(req, res) {
   }
 
   // --- Proxy: Dashboard Stats, Campaigns, Wallet, Inbox → Warmup Manager ---
-  if (pathname.startsWith('/api/') && !pathname.startsWith('/api/v1/') && !pathname.startsWith('/api/billing') && !pathname.startsWith('/api/tenants') && !pathname.startsWith('/api/webhooks') && !pathname.startsWith('/api/referrals') && !pathname.startsWith('/api/admin') && !pathname.startsWith('/api/notifications') && !pathname.startsWith('/api/users') && !pathname.startsWith('/api/bubble') && !pathname.startsWith('/api/instances') && !pathname.startsWith('/api/messages') && !pathname.startsWith('/api/analytics') && !pathname.startsWith('/api/onboarding')) {
+  if (pathname.startsWith('/api/') && !pathname.startsWith('/api/v1/') && !pathname.startsWith('/api/billing') && !pathname.startsWith('/api/tenants') && !pathname.startsWith('/api/webhooks') && !pathname.startsWith('/api/referrals') && !pathname.startsWith('/api/admin') && !pathname.startsWith('/api/notifications') && !pathname.startsWith('/api/users') && !pathname.startsWith('/api/bubble') && !pathname.startsWith('/api/instances') && !pathname.startsWith('/api/messages') && !pathname.startsWith('/api/analytics') && !pathname.startsWith('/api/onboarding') && !pathname.startsWith('/api/inbox')) {
     // FIX (auditoria): rotas sensíveis proxypadas ao warmup-core (campanhas, wallet,
     // warmup, dashboard) NÃO exigiam auth — qualquer um disparava campanha/spam em
     // nome de qualquer tenant. Agora exige JWT válido e injeta o tenant resolvido
@@ -2605,24 +2873,15 @@ async function handler(req, res) {
     req.tenantId = tenantId;
     if (body) req.body = body;
 
-    // Credenciais UAZAPI: busca o provider_account do tenant via uazapiAccountService
-    let uazapiCredentials = null;
+    // Credenciais UAZAPI: busca todas as provider_accounts ativas e as passa para o contexto
+    let uazapiAccounts = [];
     if (uazapiAccountService) {
       try {
         const accounts = await uazapiAccountService.listAccounts();
         if (accounts?.length) {
-          uazapiCredentials = {
-            serverUrl: accounts[0].serverUrl || process.env.UAZAPI_BASE_URL || 'https://ruptur.uazapi.com',
-            adminToken: accounts[0].adminToken,
-          };
+          uazapiAccounts = accounts;
         }
-      } catch { /* sem credenciais — controller retorna 503 */ }
-    }
-    if (!uazapiCredentials) {
-      uazapiCredentials = {
-        serverUrl: process.env.UAZAPI_BASE_URL || 'https://ruptur.uazapi.com',
-        adminToken: process.env.UAZAPI_TOKEN || process.env.UAZAPI_ADMIN_TOKEN,
-      };
+      } catch { /* sem credenciais — ignora erro e usa fallback */ }
     }
 
     const matched = await registerWhatsappRoutes({
@@ -2630,7 +2889,7 @@ async function handler(req, res) {
       res,
       pathname,
       method: req.method,
-      ctx: { supabase, uazapiCredentials },
+      ctx: { supabase, uazapiAccounts },
     });
     if (matched) return;
     return json(res, 404, { error: 'Rota não encontrada' }, req);
