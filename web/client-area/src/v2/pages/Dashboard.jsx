@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Icon, Button, Card, KPI, Badge, AIChip, useToast, fireConfetti } from '../../ds/index.js';
+import { useQuery } from '@tanstack/react-query';
+import { Icon, Button, Card, KPI, Badge, AIChip, useToast, fireConfetti, Skeleton } from '../../ds/index.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 
 const DASH_CSS = `
@@ -52,14 +53,7 @@ const DASH_CSS = `
   .revpred-text h4 b { color: var(--brand-500); font-variant-numeric: tabular-nums; }
   .revpred-text p { margin: 0; font-size: 12.5px; color: var(--ink-600); }
 
-  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 16px; }
-  .kpis .card { padding: 14px 16px; }
-  .kpis .kpi-value { font-size: 22px; }
-  @media (max-width: 1280px) { .kpis { grid-template-columns: repeat(3, 1fr); } }
-  @media (max-width: 720px)  { .kpis { grid-template-columns: repeat(2, 1fr); } }
-
-  .dash-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
-  @media (max-width: 1100px) { .dash-grid { grid-template-columns: 1fr; } }
+  /* Replaced grid with Tailwind utility classes in the component */
 
   .alert-list { display: flex; flex-direction: column; gap: 8px; }
   .alert-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--ink-150); border-radius: 8px; }
@@ -155,42 +149,29 @@ export default function Dashboard() {
 
   const { session, tenant } = useAuth();
   const [activation, setActivation] = useState(loadActivation);
-  const [stats, setStats] = useState({ replies: 0, qualified: 0, hours: 0, value: 0 });
-  const [alerts, setAlerts] = useState([]);
-  const [activities, setActivities] = useState([]);
 
-  // Buscar métricas reais do dashboard
-  useEffect(() => {
-    if (!session?.access_token || !tenant?.id) return;
-    fetch(`/api/analytics/dashboard?tenantId=${tenant.id}`, {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (!d) return;
-        if (d.stats) setStats(s => ({
-          replies:   d.stats.messagesDelivered ?? s.replies,
-          qualified: d.stats.leadsQualified    ?? s.qualified,
-          hours:     d.stats.avgResponseTime   ?? s.hours,
-          value:     d.stats.revenueEstimate   ?? s.value,
-        }));
-        if (d.alerts)     setAlerts(d.alerts);
-        if (d.activities) setActivities(d.activities);
-      })
-      .catch(() => {});
-  }, [session?.access_token, tenant?.id]);
+  const { data: dashboardData, isLoading } = useQuery({
+    queryKey: ['dashboard', tenant?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/dashboard?tenantId=${tenant.id}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) throw new Error('Falha ao carregar métricas');
+      return res.json();
+    },
+    enabled: !!session?.access_token && !!tenant?.id,
+    refetchInterval: 30000, // Atualiza dados reais a cada 30 segundos (Cockpit ao vivo)
+  });
 
-  useEffect(() => {
-    const t = setInterval(() => {
-      setStats(s => ({
-        replies: s.replies + Math.floor(Math.random() * 3),
-        qualified: s.qualified + (Math.random() > 0.7 ? 1 : 0),
-        hours: +(s.hours + 0.1).toFixed(1),
-        value: s.value + Math.floor(Math.random() * 240),
-      }));
-    }, 30000);
-    return () => clearInterval(t);
-  }, []);
+  const stats = {
+    replies: dashboardData?.stats?.messagesDelivered ?? 0,
+    qualified: dashboardData?.stats?.leadsQualified ?? 0,
+    hours: dashboardData?.stats?.avgResponseTime ?? 0,
+    value: dashboardData?.stats?.revenueEstimate ?? 0,
+  };
+  
+  const alerts = dashboardData?.alerts ?? [];
+  const activities = dashboardData?.activities ?? [];
 
   useEffect(() => {
     if (activation.activation >= 60) return;
@@ -313,16 +294,16 @@ export default function Dashboard() {
             <div className="hoje-sub">Equivale a um SDR full-time · atualiza a cada 30 segundos</div>
           </div>
           <div className="hoje-stats">
-            <div className="hoje-stat"><div className="v tabular">{stats.replies}</div><div className="l">respostas IA</div><div className="t">+22 vs ontem</div></div>
-            <div className="hoje-stat"><div className="v tabular">{stats.qualified}</div><div className="l">leads qualificados</div><div className="t">+3 vs ontem</div></div>
-            <div className="hoje-stat"><div className="v tabular">{stats.hours}h</div><div className="l">economizadas</div><div className="t">+0,8h vs ontem</div></div>
-            <div className="hoje-stat"><div className="v tabular">R$ {stats.value.toLocaleString('pt-BR')}</div><div className="l">potencial criado</div><div className="t">+R$ 1.240</div></div>
+            <div className="hoje-stat"><div className="v tabular">{isLoading ? <Skeleton w={40} h={26} /> : stats.replies}</div><div className="l">respostas IA</div><div className="t">+22 vs ontem</div></div>
+            <div className="hoje-stat"><div className="v tabular">{isLoading ? <Skeleton w={40} h={26} /> : stats.qualified}</div><div className="l">leads qualificados</div><div className="t">+3 vs ontem</div></div>
+            <div className="hoje-stat"><div className="v tabular">{isLoading ? <Skeleton w={40} h={26} /> : `${stats.hours}h`}</div><div className="l">economizadas</div><div className="t">+0,8h vs ontem</div></div>
+            <div className="hoje-stat"><div className="v tabular">{isLoading ? <Skeleton w={80} h={26} /> : `R$ ${stats.value.toLocaleString('pt-BR')}`}</div><div className="l">potencial criado</div><div className="t">+R$ 1.240</div></div>
           </div>
           <Button variant="secondary" size="sm" icon="arrowRight">Ver detalhes</Button>
         </div>
       </div>
 
-      <div className="kpis">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
         <KPI label="MRR"               value="R$ 84.2k" delta="+12,4%"  deltaTone="up" hint="vs abril" />
         <KPI label="Leads novos"       value="248"      delta="+38"      hint="esta semana" />
         <KPI label="SQL"               value="128"      delta="+22"      hint="taxa 51%" />
@@ -340,8 +321,8 @@ export default function Dashboard() {
         <Button variant="primary" size="sm" icon="arrowRight" onClick={() => go('numbers')}>Aquecer agora</Button>
       </div>
 
-      <div className="dash-grid">
-        <div className="stack" style={{ gap: 16 }}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 flex flex-col gap-4">
           <Card title="Receita Previsível — Seeds / Nets / Opps / Deals">
             <FunnelChart />
           </Card>
@@ -351,7 +332,7 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        <div className="stack" style={{ gap: 16 }}>
+        <div className="flex flex-col gap-4">
           <Card title="Alertas IA & SLA" action={<Badge tone="danger">3 críticos</Badge>}>
             <div className="alert-list">
               {alerts.map((a, i) => (
@@ -374,7 +355,16 @@ export default function Dashboard() {
             }
           >
             <div className="activity-list">
-              {activities.map(a => (
+              {isLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={`sk-${i}`} className="activity-item">
+                    <Skeleton w={26} h={26} style={{ borderRadius: '50%' }} />
+                    <div className="activity-text"><Skeleton w="80%" h={12} /><Skeleton w="40%" h={10} style={{ marginTop: 4 }} /></div>
+                  </div>
+                ))
+              ) : activities.length === 0 ? (
+                <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--ink-400)', fontSize: 13 }}>Nenhuma atividade recente.</div>
+              ) : activities.map(a => (
                 <div key={a.id} className="activity-item">
                   <div className={`activity-ic ${a.tone}`}><Icon name={iconForActivity(a.kind)} size={12} /></div>
                   <div className="activity-text">{a.text}<small>{a.who}</small></div>

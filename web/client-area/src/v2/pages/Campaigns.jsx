@@ -9,14 +9,15 @@
  *
  * Backend: campaigns.api.js → gateway /api/campaigns/* (proxy warmup-core).
  */
-import { useState, useEffect, useCallback } from 'react';
-import { PageHeader, Button, Input, Modal, Badge, EmptyState } from '../../ds/index.js';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { PageHeader, Button, Input, Modal, Badge, EmptyState, Skeleton } from '../../ds/index.js';
 import { campaignsApi } from '../../api/campaigns.api.js';
 import { inboxApi } from '../../api/inbox.api.js';
 
 const STYLES = `
   .cmp-wrap { margin-top: 14px; }
-  .cmp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+  /* cmp-grid replaced with tailwind classes in component */
   .cmp-card { background:var(--ink-0); border:1px solid var(--ink-200); border-radius:14px; padding:16px; }
   .cmp-card__head { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
   .cmp-card__name { font-size:15px; font-weight:700; color:var(--ink-900); flex:1; }
@@ -28,8 +29,7 @@ const STYLES = `
   .cmp-metric__l { font-size:11px; color:var(--ink-500); }
   .cmp-card__actions { display:flex; gap:8px; }
 
-  .cmp-form { display:flex; gap:20px; }
-  .cmp-form__col { flex:1; min-width:0; }
+  /* cmp-form and cmp-form__col replaced with Tailwind flex in component */
   .cmp-field { margin-bottom:14px; }
   .cmp-label { font-size:12px; font-weight:600; color:var(--ink-700); margin-bottom:5px; display:block; }
   .cmp-hint { font-size:11px; color:var(--ink-400); margin-top:4px; }
@@ -74,33 +74,33 @@ const EMPTY_FORM = {
 };
 
 export default function Campaigns() {
-  const [campaigns, setCampaigns] = useState([]);
-  const [instances, setInstances] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  const { data: campaignsData, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['campaigns'],
+    queryFn: async () => {
+      const data = await campaignsApi.list({ limit: 50 });
+      return data.campaigns || data || [];
+    }
+  });
+  const campaigns = campaignsData || [];
+
+  const { data: instancesData } = useQuery({
+    queryKey: ['instances'],
+    queryFn: async () => {
+      const d = await inboxApi.listInstances();
+      return d.instances || [];
+    }
+  });
+  const instances = instancesData || [];
+
   const [error, setError] = useState('');
   const [showComposer, setShowComposer] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await campaignsApi.list({ limit: 50 });
-      setCampaigns(data.campaigns || data || []);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-    inboxApi.listInstances()
-      .then((d) => setInstances(d.instances || []))
-      .catch(() => {});
-  }, [load]);
+  // erro é derivado do estado de request + possíveis erros manuais
+  const errorMsg = error || queryError?.message || '';
 
   const openComposer = () => {
     const connected = instances.filter((i) => i.status === 'connected');
@@ -151,7 +151,7 @@ export default function Campaigns() {
       const id = created.id || created.campaign?.id;
       if (launch && id) await campaignsApi.launch(id);
       setShowComposer(false);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
     } catch (e) {
       setError(e.message);
     } finally {
@@ -162,7 +162,7 @@ export default function Campaigns() {
   const doAction = async (id, action) => {
     try {
       await campaignsApi[action](id);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
     } catch (e) {
       setError(e.message);
     }
@@ -178,10 +178,12 @@ export default function Campaigns() {
         actions={<Button onClick={openComposer}>Nova campanha</Button>}
       />
 
-      {error && !showComposer && <div style={{ color: '#EF4444', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {errorMsg && !showComposer && <div style={{ color: '#EF4444', fontSize: 13, marginBottom: 12 }}>{errorMsg}</div>}
 
       {loading ? (
-        <div style={{ padding: 48, textAlign: 'center', color: 'var(--ink-500)' }}>Carregando campanhas…</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
+          {Array.from({length:3}).map((_,i) => <Skeleton key={i} h={160} style={{ borderRadius:14 }} />)}
+        </div>
       ) : campaigns.length === 0 ? (
         <EmptyState
           icon="broadcast"
@@ -190,7 +192,7 @@ export default function Campaigns() {
           action={<Button onClick={openComposer}>Nova campanha</Button>}
         />
       ) : (
-        <div className="cmp-grid">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
           {campaigns.map((c) => {
             const m = c.metrics || {};
             const status = c.status || 'draft';
@@ -252,9 +254,8 @@ function Composer({ form, upd, instances, numbers }) {
     .replace(/\{phone\}/g, '5511999999999');
 
   return (
-    <div className="cmp-form">
-      {/* Coluna esquerda — edição */}
-      <div className="cmp-form__col">
+    <div className="flex flex-col md:flex-row gap-5">
+      <div className="flex-1 min-w-0">
         <div className="cmp-field">
           <span className="cmp-label">Nome da campanha</span>
           <Input value={form.name} onChange={(e) => upd({ name: e.target.value })} placeholder="Ex.: Promoção de junho" />
@@ -353,8 +354,7 @@ function Composer({ form, upd, instances, numbers }) {
         </div>
       </div>
 
-      {/* Coluna direita — preview */}
-      <div className="cmp-form__col" style={{ maxWidth: 320 }}>
+      <div style={{ maxWidth: 320 }}>
         <span className="cmp-label">Pré-visualização</span>
         <div className="cmp-preview">
           <div className="cmp-bubble">

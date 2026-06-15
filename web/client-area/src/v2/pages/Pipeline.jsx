@@ -11,8 +11,9 @@
  * Backend: crm.api.js → gateway /api/crm/* → { Supabase + UAZAPI }.
  * Drag-and-drop: HTML5 nativo (sem dependência externa).
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { PageHeader, Drawer, Button, Input, EmptyState } from '../../ds/index.js';
+import { useState, useMemo, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { PageHeader, Drawer, Button, Input, EmptyState, Skeleton } from '../../ds/index.js';
 import { inboxApi } from '../../api/inbox.api.js';
 import { supabase } from '../../services/supabase.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -24,15 +25,7 @@ const STYLES = `
     height:36px; padding:0 12px; border-radius:9px; border:1px solid var(--ink-200);
     background:var(--ink-0); color:var(--ink-900); font-size:13px; min-width:220px;
   }
-  .crm-board {
-    display:flex; gap:14px; overflow-x:auto; padding-bottom:12px;
-    min-height: calc(100vh - 230px);
-  }
-  .crm-col {
-    flex:0 0 288px; width:288px; background:var(--ink-50,#F7F8FA);
-    border:1px solid var(--ink-200); border-radius:14px; display:flex; flex-direction:column;
-    max-height: calc(100vh - 230px);
-  }
+  /* crm-board and crm-col replaced with Tailwind classes */
   .crm-col.drag-over { border-color:var(--brand-500,#FF6A3D); box-shadow:0 0 0 2px rgba(255,106,61,.18) inset; }
   .crm-col__head {
     display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--ink-200);
@@ -71,90 +64,87 @@ function initials(name = '') {
   return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || '').join('') || '?';
 }
 
+const STAGES = [
+  { id: 'NEW', name: 'Novo', color: '#3B82F6' },
+  { id: 'QUALIFIED', name: 'Qualificado', color: '#8B5CF6' },
+  { id: 'PROPOSAL', name: 'Proposta', color: '#F59E0B' },
+  { id: 'WON', name: 'Ganho', color: '#10B981' },
+  { id: 'LOST', name: 'Perdido', color: '#EF4444' }
+];
+
 export default function Crm() {
-  const [instances, setInstances] = useState([]);
-  const [instanceKey, setInstanceKey] = useState('');
-  const [columns, setColumns] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const queryClient = useQueryClient();
+  const { tenantId } = useAuth();
+
   const [selected, setSelected] = useState(null); // card aberto no drawer
   const [savingLead, setSavingLead] = useState(false);
   const [dragOverCol, setDragOverCol] = useState(null);
+  const [error, setError] = useState('');
   const dragRef = useRef(null); // { opportunityId, fromStatus }
-  const { tenantId } = useAuth();
 
   // Carregar instâncias
-  useEffect(() => {
-    inboxApi.listInstances()
-      .then((d) => {
-        const list = d.instances || [];
-        const allRows = [{ key: 'all', id: 'all', name: 'Todas as Instâncias', status: 'connected', phone: '' }, ...list];
-        setInstances(allRows);
-        const savedKey = localStorage.getItem('uazapi_crm_lastInstance');
-        const targetKey = savedKey && allRows.find(r => (r.key || r.id) === savedKey) ? savedKey : 'all';
-        setInstanceKey(targetKey);
-      })
-      .catch((e) => setError(e.message));
-  }, []);
+  const { data: instancesData } = useQuery({
+    queryKey: ['instances'],
+    queryFn: async () => {
+      const d = await inboxApi.listInstances();
+      const list = d.instances || [];
+      const allRows = [{ key: 'all', id: 'all', name: 'Todas as Instâncias', status: 'connected', phone: '' }, ...list];
+      return allRows;
+    }
+  });
+
+  const instances = instancesData || [];
+  
+  const savedKey = localStorage.getItem('uazapi_crm_lastInstance');
+  const targetKey = savedKey && instances.find(r => (r.key || r.id) === savedKey) ? savedKey : 'all';
+  const instanceKey = targetKey;
 
   const changeInstance = (key) => {
-    setInstanceKey(key);
     localStorage.setItem('uazapi_crm_lastInstance', key);
+    queryClient.invalidateQueries({ queryKey: ['instances'] }); // força re-render para atualizar o estado
   };
 
-  const loadPipeline = useCallback(async () => {
-    if (!tenantId) return;
-    setLoading(true);
-    setError('');
-    try {
-      const { data: opps, error } = await supabase
+
+  // Carregar Pipeline
+  const { data: opps, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['pipeline', tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('crm_opportunities')
         .select(`
           id, stage, title, amount,
           lead:lead_id ( id, name, phone, email, tags )
         `)
         .eq('tenant_id', tenantId);
-        
       if (error) throw error;
+      return data;
+    },
+    enabled: !!tenantId,
+  });
 
-      // Montar colunas
-      const STAGES = [
-        { id: 'NEW', name: 'Novo', color: '#3B82F6' },
-        { id: 'QUALIFIED', name: 'Qualificado', color: '#8B5CF6' },
-        { id: 'PROPOSAL', name: 'Proposta', color: '#F59E0B' },
-        { id: 'WON', name: 'Ganho', color: '#10B981' },
-        { id: 'LOST', name: 'Perdido', color: '#EF4444' }
-      ];
+  const columns = useMemo(() => {
+    if (!opps) return STAGES.map(s => ({ ...s, lead_status: s.id, cards: [] }));
+    return STAGES.map(s => ({
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      lead_status: s.id,
+      cards: opps.filter(o => o.stage === s.id).map(o => ({
+        opportunityId: o.id,
+        chatId: o.lead?.phone ? `${o.lead.phone}@s.whatsapp.net` : `tmp-${o.id}`,
+        leadId: o.lead?.id,
+        name: o.lead?.name || o.lead?.phone || 'Sem Nome',
+        phone: o.lead?.phone,
+        email: o.lead?.email,
+        tags: o.lead?.tags || [],
+        title: o.title,
+        amount: o.amount,
+        avatar: null
+      }))
+    }));
+  }, [opps]);
 
-      const columnsData = STAGES.map(s => ({
-        id: s.id,
-        name: s.name,
-        color: s.color,
-        lead_status: s.id,
-        cards: opps.filter(o => o.stage === s.id).map(o => ({
-          opportunityId: o.id,
-          chatId: o.lead.wa_chatid,
-          leadId: o.lead.id,
-          name: o.lead.name || o.lead.phone,
-          phone: o.lead.phone,
-          email: o.lead.email,
-          tags: o.lead.tags,
-          title: o.title,
-          amount: o.amount,
-          avatar: null
-        }))
-      }));
-
-      setColumns(columnsData);
-    } catch (e) {
-      setError(e.message);
-      setColumns([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId]);
-
-  useEffect(() => { loadPipeline(); }, [loadPipeline]);
+  const errorMsg = error || queryError?.message || '';
 
   // ── Drag-and-drop ──
   const onDragStart = (card, fromStatus) => (e) => {
@@ -163,6 +153,28 @@ export default function Crm() {
     try { e.dataTransfer.setData('text/plain', card.opportunityId); } catch { /* noop */ }
   };
 
+  const moveCardMutation = useMutation({
+    mutationFn: async ({ id, stage }) => {
+      const { error } = await supabase.from('crm_opportunities').update({ stage }).eq('id', id);
+      if (error) throw error;
+    },
+    onMutate: async ({ id, stage }) => {
+      await queryClient.cancelQueries({ queryKey: ['pipeline', tenantId] });
+      const previousOpps = queryClient.getQueryData(['pipeline', tenantId]);
+      queryClient.setQueryData(['pipeline', tenantId], old => 
+        old?.map(o => o.id === id ? { ...o, stage } : o)
+      );
+      return { previousOpps };
+    },
+    onError: (err, variables, context) => {
+      queryClient.setQueryData(['pipeline', tenantId], context.previousOpps);
+      alert(`Falha ao mover: ${err.message}`);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipeline', tenantId] });
+    }
+  });
+
   const onDropColumn = (targetStage) => async (e) => {
     e.preventDefault();
     setDragOverCol(null);
@@ -170,31 +182,7 @@ export default function Crm() {
     dragRef.current = null;
     if (!drag || drag.fromStatus === targetStage.lead_status) return;
 
-    // Atualização otimista
-    const prev = columns;
-    let movedCard;
-    const next = columns.map((col) => {
-      if (col.lead_status === drag.fromStatus) {
-        const idx = col.cards.findIndex((c) => c.opportunityId === drag.opportunityId);
-        if (idx >= 0) { movedCard = { ...col.cards[idx], leadStatus: targetStage.lead_status }; }
-        return { ...col, cards: col.cards.filter((c) => c.opportunityId !== drag.opportunityId) };
-      }
-      return col;
-    }).map((col) => (col.lead_status === targetStage.lead_status && movedCard)
-      ? { ...col, cards: [movedCard, ...col.cards] }
-      : col);
-    setColumns(next);
-
-    try {
-      const { error } = await supabase
-        .from('crm_opportunities')
-        .update({ stage: targetStage.lead_status })
-        .eq('id', drag.opportunityId);
-      if (error) throw error;
-    } catch (err) {
-      setError(`Falha ao mover: ${err.message}`);
-      setColumns(prev); // rollback
-    }
+    moveCardMutation.mutate({ id: drag.opportunityId, stage: targetStage.lead_status });
   };
 
   const saveLead = async (patch) => {
@@ -214,7 +202,7 @@ export default function Crm() {
       if (error) throw error;
       
       setSelected((s) => ({ ...s, ...mapPatchToCard(patch) }));
-      loadPipeline();
+      queryClient.invalidateQueries({ queryKey: ['pipeline', tenantId] });
     } catch (e) {
       setError(e.message);
     } finally {
@@ -243,24 +231,38 @@ export default function Crm() {
             </option>
           ))}
         </select>
-        <Button variant="ghost" onClick={() => loadPipeline(instanceKey)} disabled={loading || !instanceKey}>
+        <Button variant="ghost" onClick={() => queryClient.invalidateQueries({ queryKey: ['pipeline', tenantId] })} disabled={loading || !instanceKey}>
           Atualizar
         </Button>
-        {error && <span style={{ color: '#EF4444', fontSize: 12 }}>{error}</span>}
+        {errorMsg && <span style={{ color: '#EF4444', fontSize: 12 }}>{errorMsg}</span>}
       </div>
 
       {loading ? (
-        <div className="crm-loading">Carregando funil…</div>
+        <div className="crm-board">
+          {STAGES.map((s) => (
+            <div key={s.id} className="crm-col">
+              <div className="crm-col__head">
+                <span className="crm-col__dot" style={{ background: s.color }} />
+                <span className="crm-col__title">{s.name}</span>
+                <Skeleton w={20} h={14} style={{ borderRadius: 20 }} />
+              </div>
+              <div className="crm-col__body">
+                <div className="crm-card"><Skeleton h={30} w={30} style={{ borderRadius: '50%', float: 'left', marginRight: 8 }} /><Skeleton h={14} w="60%" /><Skeleton h={10} w="40%" style={{ marginTop: 6 }} /></div>
+                <div className="crm-card"><Skeleton h={30} w={30} style={{ borderRadius: '50%', float: 'left', marginRight: 8 }} /><Skeleton h={14} w="80%" /><Skeleton h={10} w="50%" style={{ marginTop: 6 }} /></div>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : !instanceKey ? (
         <div className="crm-empty-wrap">
           <EmptyState title="Sem instância conectada" text="Conecte um número WhatsApp para ver seus leads." />
         </div>
       ) : (
-        <div className="crm-board">
+        <div className="flex gap-4 overflow-x-auto pb-3 min-h-[calc(100vh-230px)] items-start">
           {columns.map((col) => (
             <div
               key={col.id}
-              className={`crm-col ${dragOverCol === col.id ? 'drag-over' : ''}`}
+              className={`flex-none w-72 bg-gray-50 border border-gray-200 rounded-xl flex flex-col max-h-[calc(100vh-230px)] crm-col ${dragOverCol === col.id ? 'drag-over' : ''}`}
               onDragOver={(e) => { e.preventDefault(); setDragOverCol(col.id); }}
               onDragLeave={() => setDragOverCol((c) => (c === col.id ? null : c))}
               onDrop={onDropColumn(col)}

@@ -11,6 +11,9 @@ import { ToastProvider as RupturToastProvider } from './ds/index.js';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './contexts/AuthContext';
 import { InboxBadgeProvider } from './contexts/InboxBadgeContext.jsx';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './api/queryClient.js';
+import AppShellSkeleton from './components/layout/AppShellSkeleton.jsx';
 
 // Público
 import LoginScreen from './pages/LoginScreen';
@@ -47,18 +50,11 @@ const V0_STUBS = [
   'grupos','canais','rede-coletiva','business','growth',
 ];
 
-function LoadingScreen() {
-  return (
-    <div style={{
-      minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',
-      background:'#0E1116',color:'#9aa3b2',fontFamily:'Inter,sans-serif',fontSize:14,
-    }}>Carregando…</div>
-  );
-}
+
 
 function RootRedirect() {
   const { session, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
+  if (loading) return <AppShellSkeleton />;
   return <Navigate to={session ? '/v0/dashboard' : '/v0/landing'} replace />;
 }
 
@@ -75,11 +71,12 @@ function App() {
   }, []);
 
   return (
-    <RupturToastProvider>
-      <InboxBadgeProvider>
-      <BrowserRouter>
-        <Suspense fallback={<LoadingScreen />}>
-          <Routes>
+    <QueryClientProvider client={queryClient}>
+      <RupturToastProvider>
+        <InboxBadgeProvider>
+        <BrowserRouter>
+          <Suspense fallback={<AppShellSkeleton />}>
+            <Routes>
             <Route path="/"       element={<RootRedirect />} />
             <Route path="/login"  element={<LoginScreen />} />
             <Route path="/signup" element={<SignUp />} />
@@ -124,7 +121,8 @@ function App() {
         </Suspense>
       </BrowserRouter>
       </InboxBadgeProvider>
-    </RupturToastProvider>
+      </RupturToastProvider>
+    </QueryClientProvider>
   );
 }
 

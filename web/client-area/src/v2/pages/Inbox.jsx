@@ -368,14 +368,7 @@ const STYLES = `
 function fmtTime(ts) {
   if (!ts) return '';
   const ms = ts > 1e10 ? ts : ts * 1000;
-  const d = new Date(ms);
-  const now = new Date();
-  if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  }
-  const yest = new Date(now); yest.setDate(now.getDate() - 1);
-  if (d.toDateString() === yest.toDateString()) return 'Ontem';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  return new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
 function dayLabel(ts) {
@@ -419,22 +412,32 @@ function lastMsgPreview(chat) {
 }
 
 function msgText(msg) {
+  if (typeof msg.message === 'string') return msg.message;
   const m = msg.message || {};
-  return (
+  const text = (
     m.conversation ||
     m.extendedTextMessage?.text ||
     m.imageMessage?.caption ||
     m.videoMessage?.caption ||
     m.documentMessage?.title ||
+    m.documentMessage?.fileName ||
     m.buttonsResponseMessage?.selectedDisplayText ||
     m.listResponseMessage?.title ||
     msg.wa_lastMessageText ||
+    msg.text || msg.body || m.text || m.body ||
     (msg.messageType === 'audioMessage' || msg.messageType === 'pttMessage' ? '🎤 Áudio' : '') ||
     (msg.messageType === 'imageMessage' ? '📷 Imagem' : '') ||
     (msg.messageType === 'videoMessage' ? '🎥 Vídeo' : '') ||
     (msg.messageType === 'documentMessage' ? '📄 Documento' : '') ||
-    '[mensagem]'
+    (msg.messageType === 'reactionMessage' ? '👍 Reação' : '') ||
+    (msg.messageType === 'protocolMessage' ? '🚫 Mensagem apagada' : '') ||
+    ''
   );
+  if (!text) {
+    console.log('[DEBUG Inbox] Mensagem sem texto detectado:', msg);
+    return '[mensagem]';
+  }
+  return text;
 }
 
 function isFromMe(msg) {
@@ -567,11 +570,15 @@ export default function Inbox() {
   const [tagDraft, setTagDraft] = useState('');
   const [sseLive, setSseLive] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [showPanel, setShowPanel] = useState(false);
+  const [typingStatus, setTypingStatus] = useState(null);
 
   // Busca CRM sempre que o chat ativo mudar
   useEffect(() => {
     if (!activeChat || !user?.tenant_id) {
+       // eslint-disable-next-line react-hooks/set-state-in-effect
        setCrmLead(null);
+       // eslint-disable-next-line react-hooks/set-state-in-effect
        setCrmOpp(null);
        return;
     }
@@ -617,6 +624,7 @@ export default function Inbox() {
     setActiveChat(null);
     setMessages([]);
     setActiveLabel(null);
+    setTypingStatus(null);
   }, []);
 
   const loadLabels = useCallback(async (key) => {
@@ -710,14 +718,6 @@ export default function Inbox() {
     if (!instanceKey || !authReady) return;
     let refreshT;
     
-    const signal = () => {
-      clearTimeout(refreshT);
-      refreshT = setTimeout(() => {
-        reloadChatsRef.current?.(true);
-        const c = activeChatRef.current;
-        if (c) loadMessagesRef.current?.(c, true);
-      }, 500); // 500ms debounce
-    };
 
     const channel = supabase.channel(`uazapi_messages_${instanceKey}`)
       .on(
@@ -727,19 +727,41 @@ export default function Inbox() {
           setSseLive(true);
           const active = activeChatRef.current;
           
-          // Se a mensagem for pro chat atual, atualiza na hora sem piscar
-          if (active && payload.new && payload.new.message) {
-            const rowMsg = payload.new.message;
-            if (payload.new.chat_id === (active.wa_chatid || active.wa_fastid)) {
-              setMessages(prev => {
-                const idx = prev.findIndex(m => msgId(m) === msgId(rowMsg));
-                if (idx >= 0) {
-                  const next = [...prev];
-                  next[idx] = { ...next[idx], ...rowMsg };
-                  return next;
-                }
-                return [...prev, rowMsg];
-              });
+          if (active && payload.new) {
+            const chatId = payload.new.chat_id;
+            if (chatId === (active.wa_chatid || active.wa_fastid)) {
+              if (payload.eventType === 'INSERT') {
+                const rowMsg = payload.new.raw_payload || { 
+                  key: { id: payload.new.message_id, fromMe: payload.new.direction === 'out' }, 
+                  message: { conversation: payload.new.body }, 
+                  messageTimestamp: Math.floor(new Date(payload.new.timestamp || Date.now()).getTime() / 1000), 
+                  status: payload.new.status 
+                };
+                rowMsg.status = payload.new.status || rowMsg.status;
+
+                setMessages(prev => {
+                  const id = msgId(rowMsg);
+                  if (id) {
+                    const idx = prev.findIndex(m => msgId(m) === id);
+                    if (idx >= 0) {
+                      const next = [...prev];
+                      next[idx] = { ...next[idx], ...rowMsg, status: rowMsg.status || next[idx].status };
+                      return next;
+                    }
+                  }
+                  return [...prev, rowMsg];
+                });
+              } else if (payload.eventType === 'UPDATE') {
+                setMessages(prev => {
+                  const idx = prev.findIndex(m => msgId(m) === payload.new.message_id);
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = { ...next[idx], status: payload.new.status };
+                    return next;
+                  }
+                  return prev;
+                });
+              }
             }
           }
 
@@ -748,6 +770,27 @@ export default function Inbox() {
           refreshT = setTimeout(() => {
             reloadChatsRef.current?.(true);
           }, 800);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'uazapi_events', filter: `instance_id=eq.${instanceKey}` },
+        (payload) => {
+          if (payload.new.event_type?.includes('presence')) {
+            const data = payload.new.payload?.data || payload.new.payload || {};
+            const jid = data.id || data.remoteJid;
+            const presence = data.presence || data.state;
+            const active = activeChatRef.current;
+            if (active && (active.wa_chatid === jid || active.wa_fastid === jid)) {
+               if (presence === 'composing' || presence === 'recording') {
+                 setTypingStatus(presence);
+                 clearTimeout(window.typingTimeout);
+                 window.typingTimeout = setTimeout(() => setTypingStatus(null), 3000);
+               } else {
+                 setTypingStatus(null);
+               }
+            }
+          }
         }
       )
       .subscribe((status) => {
@@ -837,6 +880,7 @@ export default function Inbox() {
       setCrmOpp(data);
       setFeedback(newStatus === 'OPEN' ? 'Ticket reaberto.' : 'Ticket fechado.');
     } catch(e) {
+      console.warn('[Inbox] toggleCRMTicket falhou:', e.message);
       setFeedback('Erro ao alterar ticket no CRM.');
     } finally {
       setSavingLead(false);
@@ -995,7 +1039,17 @@ export default function Inbox() {
                 <div className={`ibx-ava${activeIsGroup ? ' group' : ''}`}>{activeIsGroup ? '👥' : initials(activeName)}</div>
                 <div className="meta">
                   <div className="name">{activeName}</div>
-                  {activePhone && <div className="phone">{activePhone}</div>}
+                  {activePhone && (
+                    <div className="phone">
+                      {typingStatus === 'recording' ? (
+                        <span style={{ color: '#29C467', fontWeight: 600 }}>gravando áudio...</span>
+                      ) : typingStatus === 'composing' ? (
+                        <span style={{ color: '#29C467', fontWeight: 600 }}>digitando...</span>
+                      ) : (
+                        activePhone
+                      )}
+                    </div>
+                  )}
                 </div>
                 <button
                   className={`ibx-iconbtn${showPanel ? ' on' : ''}`}

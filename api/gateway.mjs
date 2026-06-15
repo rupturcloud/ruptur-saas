@@ -2418,7 +2418,7 @@ async function handler(req, res) {
   }
 
   // --- Proxy: Dashboard Stats, Campaigns, Wallet, Inbox → Warmup Manager ---
-  if (pathname.startsWith('/api/') && !pathname.startsWith('/api/v1/') && !pathname.startsWith('/api/billing') && !pathname.startsWith('/api/tenants') && !pathname.startsWith('/api/webhooks') && !pathname.startsWith('/api/referrals') && !pathname.startsWith('/api/admin') && !pathname.startsWith('/api/notifications') && !pathname.startsWith('/api/users') && !pathname.startsWith('/api/bubble') && !pathname.startsWith('/api/instances') && !pathname.startsWith('/api/messages') && !pathname.startsWith('/api/analytics') && !pathname.startsWith('/api/onboarding')) {
+  if (pathname.startsWith('/api/') && !pathname.startsWith('/api/v1/') && !pathname.startsWith('/api/billing') && !pathname.startsWith('/api/tenants') && !pathname.startsWith('/api/webhooks') && !pathname.startsWith('/api/referrals') && !pathname.startsWith('/api/admin') && !pathname.startsWith('/api/notifications') && !pathname.startsWith('/api/users') && !pathname.startsWith('/api/bubble') && !pathname.startsWith('/api/instances') && !pathname.startsWith('/api/messages') && !pathname.startsWith('/api/analytics') && !pathname.startsWith('/api/onboarding') && !pathname.startsWith('/api/inbox')) {
     // FIX (auditoria): rotas sensíveis proxypadas ao warmup-core (campanhas, wallet,
     // warmup, dashboard) NÃO exigiam auth — qualquer um disparava campanha/spam em
     // nome de qualquer tenant. Agora exige JWT válido e injeta o tenant resolvido

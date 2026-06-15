@@ -8,6 +8,7 @@
     "runtime": "node modules/warmup-core/server.mjs",
     "saas": "node api/gateway.mjs",
     "saas:dev": "sh -c 'PORT_API=3001 node api/gateway.mjs'",
+    "dev": "concurrently -c \"cyan.bold,magenta.bold,yellow.bold\" -n \"WARMUP,GATEWAY,FRONTEND\" \"npm run start\" \"npm run saas:dev\" \"npm --prefix web/client-area run dev\"",
     "preview": "WARMUP_RUNTIME_HOST=127.0.0.1 WARMUP_RUNTIME_PORT=4173 npm start",
     "preview:playwright": "playwright open http://127.0.0.1:4173/",
     "preview:screenshot": "mkdir -p tmp/playwright && playwright screenshot --full-page http://127.0.0.1:4173/ tmp/playwright/preview-home.png",
@@ -60,6 +61,7 @@
   "devDependencies": {
     "@jest/globals": "^30.3.0",
     "@playwright/test": "^1.60.0",
+    "concurrently": "^10.0.3",
     "jest": "^30.3.0"
   }
 }

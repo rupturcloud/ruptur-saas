@@ -64,7 +64,7 @@ export const apiService = {
 
   // --- Wallet & Credits ---
   async getWalletData(tenantId) {
-    return authFetch(`/api/wallet?tenantId=${tenantId}`);
+    return authFetch(`/api/wallet/balance?tenantId=${tenantId}`);
   },
 
   async getWalletHistory(tenantId) {
